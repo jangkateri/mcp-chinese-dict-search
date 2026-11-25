@@ -1,0 +1,17 @@
+/target/
+# Dictionary archives are user-supplied; never commit them
+*.zip
+*.epub
+*.log
+*.lookup-cache-v*.json
+.credentials
+/data/
+
+# Test dictionaries are synthetic and generated in the test process.
+tests/fixtures/dictionary/
+
+# Local reference notes, not part of the source release
+DictionarySetupMCP.txt
+
+# Release archives are build artifacts
+dist/*.zip

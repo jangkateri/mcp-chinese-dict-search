@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "chinese-medicine-dictionary": {
+      "command": "C:/path/to/mcp-chinese-dict-search.exe",
+      "args": [
+        "--data",
+        "C:/path/to/dictionary.zip",
+        "--pages-dir",
+        "C:/mcp-dict-pages"
+      ]
+    }
+  }
+}

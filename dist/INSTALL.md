@@ -1,0 +1,248 @@
+# mcp-chinese-dict-search — Windows x64 installation
+
+**Version:** 0.5.0
+
+This bundle contains the MCP stdio server for a local Markdown dictionary. It does **not** contain
+dictionary data. You supply your own `.zip` archive (or the extracted Markdown directory) in the
+supported layout.
+
+## Contents
+
+| File | Purpose |
+|---|---|
+| `mcp-chinese-dict-search.exe` | The server (Windows x64). |
+| `install.ps1` | Optional installer: copies the binary and generates an MCP client entry. |
+| `mcp-config.example.json` | Template MCP client configuration with placeholders. |
+| `INSTALL.md` | This guide. |
+| `LICENSE` | MIT license for the code. |
+| `SHA256SUMS.txt` | SHA-256 checksums for the bundle files. |
+
+The dictionary archive, extracted Markdown, images, and any EPUB are deliberately absent.
+
+## Install
+
+1. Verify the checksums (optional but recommended):
+
+   ```powershell
+   Get-FileHash .\mcp-chinese-dict-search.exe -Algorithm SHA256
+   Get-Content .\SHA256SUMS.txt
+   ```
+
+2. Either copy `mcp-chinese-dict-search.exe` wherever you keep local tools, or run the installer:
+
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File .\install.ps1 -DataPath "C:\path\to\dictionary.zip"
+   ```
+
+   The installer copies the binary and `LICENSE` into
+   `%LOCALAPPDATA%\mcp-chinese-dict-search` and writes `mcp-config.json` there. It does not copy
+   the dictionary.
+
+3. Confirm startup:
+
+   ```powershell
+   .\mcp-chinese-dict-search.exe --version
+   .\mcp-chinese-dict-search.exe --help
+   ```
+
+## Prepare the linked copy (recommended)
+
+The EPUB-to-Markdown conversion dropped the `id` attributes that the book's own links use, so only
+`38-index.md` still maps anchors to entries. Build a linked copy once, at setup:
+
+```powershell
+.\mcp-chinese-dict-search.exe --data "C:\path\to\dictionary" `
+  --build-linked-data "C:\mcp-dict-data"
+```
+
+The build copies every Markdown document, inserts one `<a id="…"></a>` before each entry,
+unescapes the conversion's literal brackets so a math-enabled Markdown preview does not read the
+monograph headings as LaTeX, verifies that every entry's text is unchanged, reports link coverage,
+and exits without serving. On the real dictionary it reports 5,803 entries, 5,799 anchors inserted,
+and 14,147 of 14,226 fragment links resolved (the remainder target the index, the table of
+contents, the introduction, or a paragraph rather than an entry). Point `--data` at the copy; the
+source archive or folder is never modified. The copy is derived from the copyrighted book: do not
+commit it.
+
+## Configure the MCP client
+
+The server is a stdio process. Use absolute paths; a quoted argument may contain spaces.
+
+**Claude Code** — user scope, then verify:
+
+```powershell
+claude mcp add --scope user chinese-medicine-dictionary -- `
+  "C:/path/to/mcp-chinese-dict-search.exe" `
+  --data "C:/path/to/mcp-dict-data" `
+  --pages-dir "C:/path/to/mcp-dict-pages"
+claude mcp list
+```
+
+`--scope project` writes `.mcp.json` in the repository instead; `--scope local` keeps the entry to
+the current project for this user. Inside a session, `/mcp` lists the server and reconnects it. The
+equivalent user entry is the top-level `mcpServers` object in `~/.claude.json`:
+
+```json
+{
+  "mcpServers": {
+    "chinese-medicine-dictionary": {
+      "command": "C:/path/to/mcp-chinese-dict-search.exe",
+      "args": [
+        "--data", "C:/path/to/mcp-dict-data",
+        "--pages-dir", "C:/path/to/mcp-dict-pages"
+      ]
+    }
+  }
+}
+```
+
+**OpenCode** — current releases read `opencode.jsonc` in the project, or the global
+`~/.config/opencode/opencode.jsonc`, and expect servers under `mcp.servers`:
+
+```jsonc
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "servers": {
+      "chinese-medicine-dictionary": {
+        "type": "local",
+        "command": [
+          "C:/path/to/mcp-chinese-dict-search.exe",
+          "--data", "C:/path/to/mcp-dict-data",
+          "--pages-dir", "C:/path/to/mcp-dict-pages"
+        ]
+      }
+    }
+  }
+}
+```
+
+The CLI writes the same entry; `--global` selects the global configuration:
+
+```powershell
+opencode mcp add chinese-medicine-dictionary -- `
+  "C:/path/to/mcp-chinese-dict-search.exe" --data "C:/path/to/mcp-dict-data"
+opencode mcp list
+```
+
+Inside the TUI, `/mcps` lists the server. Older OpenCode releases placed names directly under `mcp`
+instead of `mcp.servers`.
+
+**DeepSeek Harness** — add the block to `~/.dsh/profiles/<profile>/cordis.patch.yml` (or
+`~/.dsh/cordis.patch.yml` for every profile). If the generated file contains `[]`, replace that
+`[]` with the block rather than appending to it:
+
+```yaml
+- insert:
+    - id: mcp-chinese-dict
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: chinese-medicine-dictionary
+        transport: stdio
+        command: 'C:/path/to/mcp-chinese-dict-search.exe'
+        args:
+          - --data
+          - 'C:/path/to/mcp-dict-data'
+          - --pages-dir
+          - 'C:/path/to/mcp-dict-pages'
+```
+
+The tools register as `mcp__chinese-medicine-dictionary__search_dictionary` and
+`mcp__chinese-medicine-dictionary__get_entry`. `dsh --profile <profile> --dump-config` shows whether
+the entry was composed. DSH 0.2.x ships the client; do not install
+`@deepseek-ai/dsh-mcp-client` separately. It supports tools and resources, but not MCP prompt
+templates.
+
+To make citations and suggestions clickable, add a page directory to the arguments — choose a path
+without spaces, because VS Code's terminal link detection stops at a space:
+
+```json
+"args": ["--data", "C:/mcp-dict-data", "--pages-dir", "C:/mcp-dict-pages"]
+```
+
+Every `get_entry` then writes a page for the entry and names it in the result with
+`Entry page: <absolute path>`; cross-references in the page link to sibling pages. A suggestion in a
+failed lookup is likewise followed by its page path.
+
+If your client supports environment-based configuration, this is equivalent:
+
+```json
+{
+  "mcpServers": {
+    "chinese-medicine-dictionary": {
+      "command": "C:/path/to/mcp-chinese-dict-search.exe",
+      "env": {
+        "MCP_CHINESE_DICT_DATA": "C:/path/to/dictionary.zip"
+      }
+    }
+  }
+}
+```
+
+## Tools
+
+| Tool | Use |
+|---|---|
+| `search_dictionary` | `query` (required), `scope` (`all`, `dictionary`, `meridian`, `medicinal`, `formulas`, `weights`), `limit` (1–20). |
+| `get_entry` | `term` (required), `source` (same values), `max_chars` (default 20,000). |
+
+Examples to try in a client:
+
+- `search_dictionary({"query":"abdominal fullness"})`
+- `search_dictionary({"query":"ST-36"})`
+- `get_entry({"term":"ST-36","source":"meridian"})`
+- `search_dictionary({"query":"ma huang","scope":"medicinal"})`
+- `search_dictionary({"query":"麻黄","scope":"medicinal"})`
+- `get_entry({"term":"qi2"})`
+- `search_dictionary({"query":"liang","scope":"weights"})`
+
+When a query matches no index key and the ranked hits are weak, both tools return near misses:
+English headword typos (`abdomnal` → `abdominal fullness`) and pinyin typos
+(`ma huag` → `ma huang (ephedra)`). Each suggestion carries the absolute path of a page written for
+it when `--pages-dir` is configured. With a directory source, `get_entry` also names the exact
+source line: `Source: C:\mcp-dict-data\10-c.md:3819 · anchor a1RMS`. A bare relative citation such
+as `10-c.md#a1RMS` cannot be clicked, because a terminal resolves it against its working directory.
+
+Entries are also MCP resources: `dictionary://about` and `dictionary://entry/<reference>` (anchor,
+headword, pinyin, or Chinese), and the `citation` prompt returns one entry for a reference. Clients
+that support resources and prompts can use these without a tool call.
+
+## Lookup cache
+
+The first startup writes a cache named
+`<dictionary title>.lookup-cache-v2.<fingerprint>.json` beside the dictionary. Later startups reuse
+it while the dictionary content, package version, and cache version match. A changed dictionary
+produces a new fingerprint and a new cache; the old file is removed.
+
+Use `--cache-dir <path>` or `MCP_CHINESE_DICT_CACHE_DIR` to keep the cache elsewhere, for example
+when the dictionary is on a read-only volume. The cache is derived from the copyrighted dictionary;
+do not copy it into a public repository or into `dist/`.
+
+To build the indices and write the cache without starting a client, run:
+
+```powershell
+.\mcp-chinese-dict-search.exe --build-indices --data "C:\path\to\dictionary.zip"
+```
+
+It prints the key counts and the cache path to stderr and exits; exit code `1` means the cache
+could not be written. An ordinary startup after that is a cache hit.
+
+## Data path
+
+`--data` (or `MCP_CHINESE_DICT_DATA`) is required; the server does not guess a filename. Use an
+absolute path in the client configuration because a client may launch the process from another
+directory. The citation title comes from `--title`, the archive file name, or the directory name.
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| Exit code 2, “Cannot find the dictionary” | Pass `--data` with an absolute path, or set `MCP_CHINESE_DICT_DATA`. |
+| Exit code 2, “Cannot read … as a zip archive” | The file is corrupt or not the expected archive; use the extracted `.md` directory instead. |
+| Tools missing in the client | Check the client's MCP log; a malformed JSON entry or a stale executable path is the usual cause. |
+| Wrong or empty results | Run with `--verbose --log-file server.log` and inspect the load report (counts, unresolved links, warnings). |
+| Ctrl+click on `10-c.md#a1RMS` opens Quick Open | That name is relative and exists only inside the data folder. Click the absolute `Source:` line, the `Entry page:` path, or a suggestion's page path instead. |
+| Markdown headings vanish as LaTeX in a preview | The linked-copy build unescapes `\[`/`\]`; rebuild it and reopen the file. |
+| Client hides stderr | Use `--log-file`; MCP clients usually discard a child process's stderr. |
+
+No network access is used. The server reads local files only.

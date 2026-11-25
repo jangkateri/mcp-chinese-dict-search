@@ -1,0 +1,366 @@
+[
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Search the configured dictionary: English headwords, Chinese characters, pinyin, definitions, acupuncture-point identifiers, medicinal monographs, formula monographs, and weights/measures tables. Pinyin may be tone-numbered (jia3), tone-marked (jiǎ), or toneless (qi); Chinese may be simplified (气) or traditional (氣). Exact pinyin and Chinese keys are resolved through generated lookup indices. Results are ranked and carry a file citation. Use get_entry when the exact term is known.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "limit": {
+          "default": 5,
+          "description": "How many hits to return, 1-20. Defaults to 5; a value outside that range is an error, not clamped silently.",
+          "type": "integer"
+        },
+        "query": {
+          "description": "English term; pinyin in tone-numbered (jia3), tone-marked (jiǎ), or toneless (qi) form; simplified or traditional Chinese characters; acupuncture-point identifier such as AA-1; herb name; formula name; or measurement term.",
+          "type": "string"
+        },
+        "scope": {
+          "default": "all",
+          "description": "Restrict the search to one part of the book. Defaults to all.",
+          "enum": [
+            "all",
+            "dictionary",
+            "meridian",
+            "medicinal",
+            "formulas",
+            "weights"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "query"
+      ],
+      "type": "object"
+    },
+    "name": "search_dictionary",
+    "outputSchema": {
+      "additionalProperties": false,
+      "description": "Search results returned to the tool layer.",
+      "properties": {
+        "hits": {
+          "items": {
+            "additionalProperties": false,
+            "description": "One ranked search result.",
+            "properties": {
+              "anchor": {
+                "type": "string"
+              },
+              "file": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "line": {
+                "type": "integer"
+              },
+              "matched_in": {
+                "description": "How a search hit matched.",
+                "enum": [
+                  "headword",
+                  "alias",
+                  "body",
+                  "id"
+                ],
+                "type": "string"
+              },
+              "redirect": {
+                "type": "boolean"
+              },
+              "score": {
+                "type": "integer"
+              },
+              "snippet": {
+                "type": "string"
+              },
+              "source": {
+                "description": "Which part of the source a result comes from.",
+                "enum": [
+                  "dictionary",
+                  "meridian",
+                  "medicinal",
+                  "formulas",
+                  "weights"
+                ],
+                "type": "string"
+              },
+              "source_file": {
+                "description": "Absolute source file and line when the data is an extracted directory.",
+                "type": "string"
+              },
+              "term": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "source",
+              "term",
+              "snippet",
+              "matched_in",
+              "score",
+              "file",
+              "redirect"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "query": {
+          "type": "string"
+        },
+        "scope": {
+          "description": "Query domain filter.",
+          "enum": [
+            "all",
+            "dictionary",
+            "meridian",
+            "medicinal",
+            "formulas",
+            "weights"
+          ],
+          "type": "string"
+        },
+        "suggestions": {
+          "description": "Near-miss suggestions when no exact key matched and the ranked hits are\nweak, for example `jia gen (jia root)`.",
+          "items": {
+            "additionalProperties": false,
+            "description": "One near-miss suggestion, with the term that resolves it and, when the tool\nlayer has written one, the page a terminal can open.",
+            "properties": {
+              "page": {
+                "description": "Absolute page path, filled by the tool layer when pages are enabled.",
+                "type": "string"
+              },
+              "term": {
+                "description": "Term that resolves the entry, for example `jia root`.",
+                "type": "string"
+              },
+              "text": {
+                "description": "Display text, for example `jia gen (jia root)`.",
+                "type": "string"
+              }
+            },
+            "required": [
+              "text",
+              "term"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "total": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "query",
+        "scope",
+        "hits",
+        "total",
+        "suggestions"
+      ],
+      "title": "SearchResponse",
+      "type": "object"
+    },
+    "title": "Search the Chinese medicine dictionary"
+  },
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Return one exact entry from the main dictionary or an appendix: its Chinese and pinyin aliases, full text, resolved cross-references, related acupuncture-point monographs, and a citation. Accepts a headword; pinyin in tone-numbered (jia3), tone-marked (jiǎ), or toneless (jia) form; simplified or traditional Chinese characters; point identifier; herb name or identifier; formula name or identifier; weights/measures section; or a citation anchor such as a1ALP.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "max_chars": {
+          "default": 20000,
+          "description": "Truncate the entry text to this many characters. Defaults to 20000; values above 100000 are an error.",
+          "type": "integer"
+        },
+        "source": {
+          "default": "all",
+          "description": "Restrict the lookup to one part of the book. Defaults to all.",
+          "enum": [
+            "all",
+            "dictionary",
+            "meridian",
+            "medicinal",
+            "formulas",
+            "weights"
+          ],
+          "type": "string"
+        },
+        "term": {
+          "description": "Exact headword; pinyin in tone-numbered (jia3), tone-marked (jiǎ), or toneless (qi) form; simplified or traditional Chinese characters; point identifier such as AA-1; herb or formula name; weights/measures section title; or citation anchor such as a1ALP.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "term"
+      ],
+      "type": "object"
+    },
+    "name": "get_entry",
+    "outputSchema": {
+      "additionalProperties": false,
+      "description": "An exact-entry response.",
+      "properties": {
+        "aliases": {
+          "additionalProperties": false,
+          "description": "Flattened alias display for one entry.",
+          "properties": {
+            "english": {
+              "type": "string"
+            },
+            "pinyin_ascii": {
+              "type": "string"
+            },
+            "pinyin_toned": {
+              "type": "string"
+            },
+            "simplified": {
+              "type": "string"
+            },
+            "traditional": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "simplified",
+            "traditional",
+            "pinyin_toned",
+            "pinyin_ascii",
+            "english"
+          ],
+          "type": "object"
+        },
+        "citation": {
+          "type": "string"
+        },
+        "content": {
+          "type": "string"
+        },
+        "cross_references": {
+          "items": {
+            "additionalProperties": false,
+            "description": "A parsed `<a href=\"file#anchor\">text</a>` link.",
+            "properties": {
+              "resolved": {
+                "type": "boolean"
+              },
+              "target_anchor": {
+                "type": "string"
+              },
+              "target_file": {
+                "type": "string"
+              },
+              "target_term": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "text",
+              "resolved"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "id": {
+          "type": "string"
+        },
+        "line": {
+          "description": "1-based line of the entry in `source_file`.",
+          "type": "integer"
+        },
+        "redirected_from": {
+          "type": "string"
+        },
+        "related": {
+          "items": {
+            "additionalProperties": false,
+            "description": "A compact appendix summary attached to an entry.",
+            "properties": {
+              "chinese": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "source": {
+                "description": "Which part of the source a result comes from.",
+                "enum": [
+                  "dictionary",
+                  "meridian",
+                  "medicinal",
+                  "formulas",
+                  "weights"
+                ],
+                "type": "string"
+              },
+              "summary": {
+                "type": "string"
+              },
+              "term": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "source",
+              "term",
+              "chinese",
+              "summary"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "source": {
+          "description": "Which part of the source a result comes from.",
+          "enum": [
+            "dictionary",
+            "meridian",
+            "medicinal",
+            "formulas",
+            "weights"
+          ],
+          "type": "string"
+        },
+        "source_file": {
+          "description": "Absolute source file when the data is an extracted directory. A terminal\ncan open `source_file:line`; a bare `10-c.md#a1RMS` cannot, because VS\nCode resolves it against the working directory and then finds nothing.",
+          "type": "string"
+        },
+        "term": {
+          "type": "string"
+        },
+        "total_chars": {
+          "type": "integer"
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "source",
+        "term",
+        "aliases",
+        "content",
+        "cross_references",
+        "related",
+        "citation",
+        "truncated",
+        "total_chars"
+      ],
+      "title": "EntryResponse",
+      "type": "object"
+    },
+    "title": "Read a dictionary or appendix entry"
+  }
+]
