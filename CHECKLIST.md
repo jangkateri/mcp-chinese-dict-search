@@ -1105,6 +1105,24 @@ Append newest entries at the bottom. Include date, task, command/evidence, and r
   clippy clean in both; fmt clean.
 - No push, tag, or release.
 
+### 2026-11-27 — v0.6.0 release
+
+- Added `CHANGELOG.md` covering graph traversal, graph and network images, appendix networks,
+  semantic retrieval, the default-feature change, the Rust evaluator, and the parser, matching,
+  latency, and scoped-fusion fixes.
+- Windows asset: `mcp-chinese-dict-search-0.6.0-windows-x64.zip`, 2,091,722 bytes, SHA-256
+  `3663ede8f89cf4ccc32ed3ee1680322ea1f30a03de173da3b35b958c0adb6760`. It contains the server,
+  `evaluate-semantic.exe`, `INSTALL.md`, `install.ps1`, the config example, `LICENSE`,
+  `SHA256SUMS.txt`, and `CHANGELOG.md`; no dictionary data, model, index, cache, query set, or
+  credential.
+- Release binaries: server 3,110,400 bytes, SHA-256
+  `fb1105bdbe266b18fe060422757331cd578f0d7f26be807fcf8036b87275985f`; evaluator 1,803,264 bytes,
+  SHA-256 `11b0517b0ea913358c1c154ea44a8aa5b9192de101f3da46607428d526fb72f1`.
+- Published tag and GitHub release: `v0.6.0`,
+  https://github.com/jangkateri/mcp-chinese-dict-search/releases/tag/v0.6.0.
+- Gates: default 175 unit + 2 evaluator + 31 integration; minimal 120 unit + 29 integration;
+  clippy clean in both; fmt clean; dist checksums verify.
+
 ---
 
 ## Completed external input
