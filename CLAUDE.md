@@ -10,10 +10,16 @@ enforce.
 medicine dictionary in Markdown and its four appendices (meridians/acupuncture points, medicinal
 agents, herbal formulas, weights and measures). It loads a `.zip` or extracted directory, parses
 the main and appendix entries, resolves the dictionary's internal links through its index file,
-and exposes two tools: `search_dictionary` and `get_entry`,
-plus the optional surfaces `dictionary://entry/<anchor>` resources and a `citation` prompt, and
-optional per-entry Markdown pages so a citation can be clicked.
-See [`PLAN.md`](PLAN.md) for the full design and [`CHECKLIST.md`](CHECKLIST.md) for live status.
+and exposes six tools: `search_dictionary`, `get_entry`, `related_entries`, `render_graph`,
+`related_network`, and `render_network`, plus the optional surfaces
+`dictionary://entry/<anchor>` resources and a `citation` prompt, and optional per-entry Markdown
+pages so a citation can be clicked. `related_entries` follows the resolved cross-reference graph
+in either direction; `render_graph` draws it as a PNG. `related_network` covers formula families,
+formula-medicinal composition, and named point combinations; `render_network` draws those. An
+optional `semantic` Cargo feature adds gated hybrid retrieval over a loopback-only Ollama
+embedding model; the default build, configuration, and dependency set stay lexical-only.
+See [`PLAN.md`](PLAN.md) for the full design and [`CHECKLIST.md`](CHECKLIST.md) for live status,
+and [`ENHANCEMENT-PLAN.md`](ENHANCEMENT-PLAN.md) for the semantic design and phases.
 
 ## Architecture, in one glance
 
@@ -21,10 +27,13 @@ See [`PLAN.md`](PLAN.md) for the full design and [`CHECKLIST.md`](CHECKLIST.md) 
 archive; `transport.rs` reads newline-delimited JSON-RPC from stdin and spawns one task per
 message; `protocol.rs` classifies it; `server.rs` dispatches `initialize`, `ping`, `tools/list`,
 `tools/call`, `resources/list`, `resources/templates/list`, `resources/read`, `prompts/list`,
-`prompts/get`, and `logging/setLevel`; `tools.rs` validates arguments, calls `dictionary::search`,
-and renders model-facing text; `resources.rs` and `prompts.rs` serve the same entry text as
-addressable resources and the `citation` prompt, and `pages.rs` writes the clickable citation page
-when a page directory is configured. `schema.rs` derives each tool's `outputSchema` from the
+`prompts/get`, and `logging/setLevel`; `tools.rs` validates arguments, calls `dictionary::search`
+or `dictionary::related` / `dictionary::related_network`, renders model-facing text, and uses
+`graph_image.rs` for PNG output;
+`resources.rs` and `prompts.rs` serve the same entry text as addressable resources and the
+`citation` prompt, and `pages.rs` writes the clickable citation page
+when a page directory is configured. `semantic/` (feature-gated) holds the Ollama client, model
+profiles, flat index, gated fusion, and serving engine. `schema.rs` derives each tool's `outputSchema` from the
 serialized response type, so the advertised contract and the payload cannot drift.
 `dictionary/linked.rs` builds the one-time linked copy (`--build-linked-data`) that restores the
 anchors the conversion dropped. The dictionary is immutable after startup.

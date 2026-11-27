@@ -14,6 +14,10 @@ use support::{call_tool, initialize, response_for, run_session};
 
 const SEARCH: &str = "search_dictionary";
 const ENTRY: &str = "get_entry";
+const RELATED: &str = "related_entries";
+const RENDER: &str = "render_graph";
+const NETWORK: &str = "related_network";
+const RENDER_NETWORK: &str = "render_network";
 
 fn snapshot_path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/tools-list.json")
@@ -51,6 +55,31 @@ fn structured_results_validate_against_the_advertised_schemas() {
             6,
             ENTRY,
             json!({"term": "not-a-real-entry-zzz", "source": "all"}),
+        ),
+        (
+            7,
+            RELATED,
+            json!({"term": "alpha", "direction": "both", "depth": 2}),
+        ),
+        (
+            8,
+            RENDER,
+            json!({"term": "alpha", "direction": "both", "depth": 1, "limit": 2}),
+        ),
+        (
+            9,
+            NETWORK,
+            json!({"term": "Jia Decoction", "domain": "formula", "depth": 1}),
+        ),
+        (
+            10,
+            NETWORK,
+            json!({"term": "Jia Decoction", "domain": "medicinal", "depth": 1}),
+        ),
+        (
+            11,
+            RENDER_NETWORK,
+            json!({"term": "Jia Decoction", "domain": "medicinal", "depth": 1}),
         ),
     ];
     let mut messages = vec![

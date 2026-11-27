@@ -64,7 +64,8 @@
                   "headword",
                   "alias",
                   "body",
-                  "id"
+                  "id",
+                  "semantic"
                 ],
                 "type": "string"
               },
@@ -362,5 +363,797 @@
       "type": "object"
     },
     "title": "Read a dictionary or appendix entry"
+  },
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Follow the resolved cross-references of one main dictionary entry. Use outgoing for entries that this entry references, incoming for entries that reference it, and both for either. Returns up to three hops with the citation, direction, and link text that reached each entry. This tool covers main dictionary entries, not appendix entries.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "depth": {
+          "default": 1,
+          "description": "How many hops to follow, 1-3. Defaults to 1; a value outside the range is an error.",
+          "type": "integer"
+        },
+        "direction": {
+          "default": "both",
+          "description": "Follow links this entry makes, links into it, or both. Defaults to both.",
+          "enum": [
+            "outgoing",
+            "incoming",
+            "both"
+          ],
+          "type": "string"
+        },
+        "limit": {
+          "default": 20,
+          "description": "How many related entries to return, 1-50. Defaults to 20; a value outside the range is an error.",
+          "type": "integer"
+        },
+        "term": {
+          "description": "Main dictionary headword, alias, pinyin, Chinese characters, or citation anchor to start from.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "term"
+      ],
+      "type": "object"
+    },
+    "name": "related_entries",
+    "outputSchema": {
+      "additionalProperties": false,
+      "description": "The result of one graph traversal.",
+      "properties": {
+        "anchor": {
+          "type": "string"
+        },
+        "depth": {
+          "type": "integer"
+        },
+        "direction": {
+          "description": "Which links a graph traversal follows.",
+          "enum": [
+            "outgoing",
+            "incoming",
+            "both"
+          ],
+          "type": "string"
+        },
+        "nodes": {
+          "items": {
+            "additionalProperties": false,
+            "description": "One reachable entry in a graph traversal.",
+            "properties": {
+              "anchor": {
+                "type": "string"
+              },
+              "citation": {
+                "type": "string"
+              },
+              "distance": {
+                "type": "integer"
+              },
+              "edge_direction": {
+                "description": "The direction of one discovered graph edge.",
+                "enum": [
+                  "outgoing",
+                  "incoming"
+                ],
+                "type": "string"
+              },
+              "file": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "line": {
+                "type": "integer"
+              },
+              "link_text": {
+                "type": "string"
+              },
+              "redirect": {
+                "type": "boolean"
+              },
+              "source": {
+                "description": "Which part of the source a result comes from.",
+                "enum": [
+                  "dictionary",
+                  "meridian",
+                  "medicinal",
+                  "formulas",
+                  "weights"
+                ],
+                "type": "string"
+              },
+              "source_file": {
+                "type": "string"
+              },
+              "term": {
+                "type": "string"
+              },
+              "via": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "source",
+              "term",
+              "file",
+              "citation",
+              "distance",
+              "edge_direction",
+              "via",
+              "link_text",
+              "redirect"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "query": {
+          "type": "string"
+        },
+        "term": {
+          "type": "string"
+        },
+        "total": {
+          "type": "integer"
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "query",
+        "term",
+        "direction",
+        "depth",
+        "nodes",
+        "total",
+        "truncated"
+      ],
+      "title": "GraphResponse",
+      "type": "object"
+    },
+    "title": "Follow dictionary cross-references"
+  },
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Render the related-entry graph as a PNG image and return it with an absolute file path. Uses the same term, direction, depth, and limit as related_entries. The image shows the start entry, labelled nodes, and green outgoing / blue incoming edges. It is written to --pages-dir when configured, otherwise to the system temporary directory.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "depth": {
+          "default": 1,
+          "description": "How many hops to draw, 1-3. Defaults to 1; a value outside the range is an error.",
+          "type": "integer"
+        },
+        "direction": {
+          "default": "both",
+          "description": "Follow links this entry makes, links into it, or both. Defaults to both.",
+          "enum": [
+            "outgoing",
+            "incoming",
+            "both"
+          ],
+          "type": "string"
+        },
+        "limit": {
+          "default": 20,
+          "description": "How many related entries to draw, 1-50. Defaults to 20; a value outside the range is an error.",
+          "type": "integer"
+        },
+        "term": {
+          "description": "Main dictionary headword, alias, pinyin, Chinese characters, or citation anchor to start from.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "term"
+      ],
+      "type": "object"
+    },
+    "name": "render_graph",
+    "outputSchema": {
+      "additionalProperties": false,
+      "description": "A rendered graph image plus the graph it depicts.",
+      "properties": {
+        "graph": {
+          "additionalProperties": false,
+          "description": "The result of one graph traversal.",
+          "properties": {
+            "anchor": {
+              "type": "string"
+            },
+            "depth": {
+              "type": "integer"
+            },
+            "direction": {
+              "description": "Which links a graph traversal follows.",
+              "enum": [
+                "outgoing",
+                "incoming",
+                "both"
+              ],
+              "type": "string"
+            },
+            "nodes": {
+              "items": {
+                "additionalProperties": false,
+                "description": "One reachable entry in a graph traversal.",
+                "properties": {
+                  "anchor": {
+                    "type": "string"
+                  },
+                  "citation": {
+                    "type": "string"
+                  },
+                  "distance": {
+                    "type": "integer"
+                  },
+                  "edge_direction": {
+                    "description": "The direction of one discovered graph edge.",
+                    "enum": [
+                      "outgoing",
+                      "incoming"
+                    ],
+                    "type": "string"
+                  },
+                  "file": {
+                    "type": "string"
+                  },
+                  "id": {
+                    "type": "string"
+                  },
+                  "line": {
+                    "type": "integer"
+                  },
+                  "link_text": {
+                    "type": "string"
+                  },
+                  "redirect": {
+                    "type": "boolean"
+                  },
+                  "source": {
+                    "description": "Which part of the source a result comes from.",
+                    "enum": [
+                      "dictionary",
+                      "meridian",
+                      "medicinal",
+                      "formulas",
+                      "weights"
+                    ],
+                    "type": "string"
+                  },
+                  "source_file": {
+                    "type": "string"
+                  },
+                  "term": {
+                    "type": "string"
+                  },
+                  "via": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "source",
+                  "term",
+                  "file",
+                  "citation",
+                  "distance",
+                  "edge_direction",
+                  "via",
+                  "link_text",
+                  "redirect"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "query": {
+              "type": "string"
+            },
+            "term": {
+              "type": "string"
+            },
+            "total": {
+              "type": "integer"
+            },
+            "truncated": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "query",
+            "term",
+            "direction",
+            "depth",
+            "nodes",
+            "total",
+            "truncated"
+          ],
+          "type": "object"
+        },
+        "height": {
+          "type": "integer"
+        },
+        "image_path": {
+          "type": "string"
+        },
+        "mime_type": {
+          "type": "string"
+        },
+        "width": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "graph",
+        "image_path",
+        "mime_type",
+        "width",
+        "height"
+      ],
+      "title": "GraphImageResponse",
+      "type": "object"
+    },
+    "title": "Render a graph neighborhood as a PNG"
+  },
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Follow appendix relationships: formula-to-formula derivation, formula-to-medicinal composition, or point-to-named-combination membership. Edges carry a relation and a source line. The point domain covers named combining-point entries, not arbitrary co-occurrence in prose.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "depth": {
+          "default": 1,
+          "description": "How many network hops to follow, 1-3. Defaults to 1; a value outside the range is an error.",
+          "type": "integer"
+        },
+        "direction": {
+          "default": "both",
+          "description": "Follow network edges in one direction or both. Defaults to both.",
+          "enum": [
+            "outgoing",
+            "incoming",
+            "both"
+          ],
+          "type": "string"
+        },
+        "domain": {
+          "description": "Which appendix network to query: formula-to-formula, formula-to-medicinal, or point-to-combination.",
+          "enum": [
+            "formula",
+            "medicinal",
+            "point_combination"
+          ],
+          "type": "string"
+        },
+        "limit": {
+          "default": 20,
+          "description": "How many network nodes to return, 1-50. Defaults to 20; a value outside the range is an error.",
+          "type": "integer"
+        },
+        "term": {
+          "description": "Formula, medicinal, acupuncture point, or named point-combination entry to start from.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "term",
+        "domain"
+      ],
+      "type": "object"
+    },
+    "name": "related_network",
+    "outputSchema": {
+      "additionalProperties": false,
+      "description": "The result of one appendix network traversal.",
+      "properties": {
+        "depth": {
+          "type": "integer"
+        },
+        "direction": {
+          "description": "Which links a graph traversal follows.",
+          "enum": [
+            "outgoing",
+            "incoming",
+            "both"
+          ],
+          "type": "string"
+        },
+        "domain": {
+          "description": "Which appendix network to query.",
+          "enum": [
+            "formula",
+            "medicinal",
+            "point_combination"
+          ],
+          "type": "string"
+        },
+        "node_type": {
+          "description": "The kind of node in the appendix network.",
+          "enum": [
+            "formula",
+            "medicinal",
+            "point",
+            "combination",
+            "method"
+          ],
+          "type": "string"
+        },
+        "nodes": {
+          "items": {
+            "additionalProperties": false,
+            "description": "One node returned by an appendix network traversal.",
+            "properties": {
+              "citation": {
+                "type": "string"
+              },
+              "distance": {
+                "type": "integer"
+              },
+              "edge_direction": {
+                "description": "The direction of one discovered graph edge.",
+                "enum": [
+                  "outgoing",
+                  "incoming"
+                ],
+                "type": "string"
+              },
+              "file": {
+                "type": "string"
+              },
+              "id": {
+                "type": "string"
+              },
+              "label": {
+                "type": "string"
+              },
+              "line": {
+                "type": "integer"
+              },
+              "node_type": {
+                "description": "The kind of node in the appendix network.",
+                "enum": [
+                  "formula",
+                  "medicinal",
+                  "point",
+                  "combination",
+                  "method"
+                ],
+                "type": "string"
+              },
+              "relation": {
+                "description": "How one appendix node relates to another.",
+                "enum": [
+                  "derived_from",
+                  "has_derivative",
+                  "combined_with",
+                  "variant_of",
+                  "has_variant",
+                  "contains",
+                  "used_in",
+                  "uses_point",
+                  "used_in_combination",
+                  "has_combination",
+                  "method"
+                ],
+                "type": "string"
+              },
+              "source": {
+                "description": "Which part of the source a result comes from.",
+                "enum": [
+                  "dictionary",
+                  "meridian",
+                  "medicinal",
+                  "formulas",
+                  "weights"
+                ],
+                "type": "string"
+              },
+              "source_file": {
+                "type": "string"
+              },
+              "term": {
+                "type": "string"
+              },
+              "via": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "node_type",
+              "source",
+              "term",
+              "citation",
+              "file",
+              "distance",
+              "edge_direction",
+              "via",
+              "relation",
+              "label"
+            ],
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "query": {
+          "type": "string"
+        },
+        "term": {
+          "type": "string"
+        },
+        "total": {
+          "type": "integer"
+        },
+        "truncated": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "query",
+        "term",
+        "node_type",
+        "domain",
+        "direction",
+        "depth",
+        "nodes",
+        "total",
+        "truncated"
+      ],
+      "title": "NetworkResponse",
+      "type": "object"
+    },
+    "title": "Follow an appendix network"
+  },
+  {
+    "annotations": {
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Render an appendix network as a PNG using the same arguments as related_network. The file is written to --pages-dir when configured, otherwise the system temporary directory.",
+    "inputSchema": {
+      "additionalProperties": false,
+      "properties": {
+        "depth": {
+          "default": 1,
+          "description": "How many network hops to follow, 1-3. Defaults to 1; a value outside the range is an error.",
+          "type": "integer"
+        },
+        "direction": {
+          "default": "both",
+          "description": "Follow network edges in one direction or both. Defaults to both.",
+          "enum": [
+            "outgoing",
+            "incoming",
+            "both"
+          ],
+          "type": "string"
+        },
+        "domain": {
+          "description": "Which appendix network to query: formula-to-formula, formula-to-medicinal, or point-to-combination.",
+          "enum": [
+            "formula",
+            "medicinal",
+            "point_combination"
+          ],
+          "type": "string"
+        },
+        "limit": {
+          "default": 20,
+          "description": "How many network nodes to return, 1-50. Defaults to 20; a value outside the range is an error.",
+          "type": "integer"
+        },
+        "term": {
+          "description": "Formula, medicinal, acupuncture point, or named point-combination entry to start from.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "term",
+        "domain"
+      ],
+      "type": "object"
+    },
+    "name": "render_network",
+    "outputSchema": {
+      "additionalProperties": false,
+      "description": "A rendered appendix-network image plus the network it depicts.",
+      "properties": {
+        "height": {
+          "type": "integer"
+        },
+        "image_path": {
+          "type": "string"
+        },
+        "mime_type": {
+          "type": "string"
+        },
+        "network": {
+          "additionalProperties": false,
+          "description": "The result of one appendix network traversal.",
+          "properties": {
+            "depth": {
+              "type": "integer"
+            },
+            "direction": {
+              "description": "Which links a graph traversal follows.",
+              "enum": [
+                "outgoing",
+                "incoming",
+                "both"
+              ],
+              "type": "string"
+            },
+            "domain": {
+              "description": "Which appendix network to query.",
+              "enum": [
+                "formula",
+                "medicinal",
+                "point_combination"
+              ],
+              "type": "string"
+            },
+            "node_type": {
+              "description": "The kind of node in the appendix network.",
+              "enum": [
+                "formula",
+                "medicinal",
+                "point",
+                "combination",
+                "method"
+              ],
+              "type": "string"
+            },
+            "nodes": {
+              "items": {
+                "additionalProperties": false,
+                "description": "One node returned by an appendix network traversal.",
+                "properties": {
+                  "citation": {
+                    "type": "string"
+                  },
+                  "distance": {
+                    "type": "integer"
+                  },
+                  "edge_direction": {
+                    "description": "The direction of one discovered graph edge.",
+                    "enum": [
+                      "outgoing",
+                      "incoming"
+                    ],
+                    "type": "string"
+                  },
+                  "file": {
+                    "type": "string"
+                  },
+                  "id": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  },
+                  "line": {
+                    "type": "integer"
+                  },
+                  "node_type": {
+                    "description": "The kind of node in the appendix network.",
+                    "enum": [
+                      "formula",
+                      "medicinal",
+                      "point",
+                      "combination",
+                      "method"
+                    ],
+                    "type": "string"
+                  },
+                  "relation": {
+                    "description": "How one appendix node relates to another.",
+                    "enum": [
+                      "derived_from",
+                      "has_derivative",
+                      "combined_with",
+                      "variant_of",
+                      "has_variant",
+                      "contains",
+                      "used_in",
+                      "uses_point",
+                      "used_in_combination",
+                      "has_combination",
+                      "method"
+                    ],
+                    "type": "string"
+                  },
+                  "source": {
+                    "description": "Which part of the source a result comes from.",
+                    "enum": [
+                      "dictionary",
+                      "meridian",
+                      "medicinal",
+                      "formulas",
+                      "weights"
+                    ],
+                    "type": "string"
+                  },
+                  "source_file": {
+                    "type": "string"
+                  },
+                  "term": {
+                    "type": "string"
+                  },
+                  "via": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "node_type",
+                  "source",
+                  "term",
+                  "citation",
+                  "file",
+                  "distance",
+                  "edge_direction",
+                  "via",
+                  "relation",
+                  "label"
+                ],
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "query": {
+              "type": "string"
+            },
+            "term": {
+              "type": "string"
+            },
+            "total": {
+              "type": "integer"
+            },
+            "truncated": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "query",
+            "term",
+            "node_type",
+            "domain",
+            "direction",
+            "depth",
+            "nodes",
+            "total",
+            "truncated"
+          ],
+          "type": "object"
+        },
+        "width": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "network",
+        "image_path",
+        "mime_type",
+        "width",
+        "height"
+      ],
+      "title": "NetworkImageResponse",
+      "type": "object"
+    },
+    "title": "Render an appendix network as a PNG"
   }
 ]

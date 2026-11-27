@@ -29,12 +29,22 @@ fn handshake_tools_list_and_discover_work_over_stdio() {
     let tools = response_for(&responses, 2)["result"]["tools"]
         .as_array()
         .expect("tools is an array");
-    assert_eq!(tools.len(), 2);
+    assert_eq!(tools.len(), 6);
     let names: Vec<&str> = tools
         .iter()
         .filter_map(|tool| tool["name"].as_str())
         .collect();
-    assert_eq!(names, vec!["search_dictionary", "get_entry"]);
+    assert_eq!(
+        names,
+        vec![
+            "search_dictionary",
+            "get_entry",
+            "related_entries",
+            "render_graph",
+            "related_network",
+            "render_network"
+        ]
+    );
 
     // The deliberate legacy-era signal: a 2026-capable client falls back.
     assert_eq!(response_for(&responses, 3)["error"]["code"], -32601);

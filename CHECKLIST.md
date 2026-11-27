@@ -5,10 +5,10 @@ it records.**
 
 | Field | Value |
 |---|---|
-| Project version | 0.5.0 |
+| Project version | 0.6.0 |
 | Plan | [`PLAN.md`](PLAN.md) |
-| Last updated | 2026-11-25 |
-| Overall status | Working tree 0.5.0: dictionary-agnostic title, required `--data`, generic text; v0.4.1 remains the last release |
+| Last updated | 2026-11-27 |
+| Overall status | Working tree 0.6.0: graph traversal, graph PNGs, appendix networks, and optional gated semantic retrieval; v0.5.0 remains the last release |
 
 ## Status legend
 
@@ -48,7 +48,11 @@ it records.**
 | 7C | Entry resources and the citation prompt | 5 | 5 | Complete (working tree) |
 | 7D | Clickable citation pages | 3 | 3 | Complete (working tree) |
 | 7E | Output-schema contract | 5 | 5 | Complete (working tree) |
-| **Total (phases 0–7A, 7C–7E)** | | **134** | **134** | **100 %** |
+| 7F | Graph traversal and `related_entries` | 1 | 1 | Complete (tracked in `ENHANCEMENT-CHECKLIST.md`) |
+| 7G | Graph PNG rendering and `render_graph` | 1 | 1 | Complete (tracked in `ENHANCEMENT-CHECKLIST.md`) |
+| 7H | Appendix networks | 1 | 1 | Complete (tracked in `ENHANCEMENT-CHECKLIST.md`) |
+| 7I | Optional gated semantic retrieval | 1 | 1 | Complete (tracked in `ENHANCEMENT-CHECKLIST.md`) |
+| **Total (phases 0–7A, 7C–7I)** | | **138** | **138** | **100 %** |
 
 ---
 
@@ -413,6 +417,47 @@ does not validate `structuredContent`, so only a strict client exposed the drift
   surfaces list and completion gates now name the contract and the snapshot.
   - Verification: `cargo test --all-targets` (122 passed) and
     `cargo clippy --all-targets -- -D warnings` (clean).
+
+### Phase 7F — Graph traversal and `related_entries`
+
+Tracked in detail by [`ENHANCEMENT-CHECKLIST.md`](ENHANCEMENT-CHECKLIST.md) phases G1–G2.
+
+- [x] Build outgoing/incoming adjacency from resolved cross-references, including subentry anchors;
+  expose `related_entries` with direction, depth 1–3, limit 1–50, deterministic BFS, citations, a
+  derived output schema, and a reviewed `tools/list` snapshot.
+  - Verification: `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`,
+    `cargo test --all-targets` (108 unit + 27 integration), and a real-data graph smoke
+    (`qi` both depth 1: 28 reachable; depth 2: 144; 5,803 nodes, 8,275 edges).
+
+### Phase 7H — Appendix networks
+
+Tracked in detail by [`ENHANCEMENT-CHECKLIST.md`](ENHANCEMENT-CHECKLIST.md) phase A1.
+
+- [x] Add formula-family, formula-medicinal, and named point-combination networks with
+  `related_network` and `render_network`.
+  - Verification: unit tests for formula prose, ingredient lines, point grouping/boundary matching;
+    schema/snapshot/e2e; real-data Four Gentlemen and LU-9 checks; fmt/clippy/all tests.
+
+### Phase 7G — Graph PNG rendering and `render_graph`
+
+Tracked in detail by [`ENHANCEMENT-CHECKLIST.md`](ENHANCEMENT-CHECKLIST.md) phase I1.
+
+- [x] Render graph neighborhoods as PNG with a layered layout, labels, direction colours, an
+  absolute path, and an MCP image block.
+  - Verification: `cargo test --lib graph_image`, `cargo test --test tools_e2e render_graph`,
+    schema contract/snapshot, clippy, and a real `spleen` graph image.
+
+### Phase 7I — Optional gated semantic retrieval
+
+Tracked in detail by [`ENHANCEMENT-CHECKLIST.md`](ENHANCEMENT-CHECKLIST.md) phases S0–S4.
+
+- [x] Add the optional `semantic` Cargo feature and loopback-only Ollama client, digest-keyed
+  flat index, 300-point lexical gate, RRF fusion, lifecycle commands, and local evaluation
+  harness. The default build remains lexical-only and links no HTTP client.
+  - Verification: hermetic and mock-Ollama tests; real `embeddinggemma:latest` index
+    (7,042 records, 768 dimensions, 20.66 MiB); 30-query hybrid recall@5 0.567 vs lexical 0.233,
+    MRR 0.455 vs 0.183, added p95 75 ms, MCP RSS +20.66 MB; exact/pinyin/Chinese regression
+    top-1 unchanged. Decision: accepted with documented limits.
 
 ---
 
@@ -937,6 +982,93 @@ Append newest entries at the bottom. Include date, task, command/evidence, and r
 - Checks: no dictionary title, personal path, credential, or dictionary data in the tracked tree;
   100 unit + 26 integration tests pass.
 
+### 2026-11-27 — Phase 7F graph traversal
+
+- Added `src/dictionary/graph.rs`, `GraphRequest`/`GraphResponse`/`GraphNode`, and the
+  `related_entries` tool. The graph is built from resolved links only; subentry anchors fall back
+  to the containing entry via `(target_file, target_term)`.
+- Added derived output schema, `tools/list` snapshot, e2e and schema-contract coverage, and updated
+  README/PLAN/AGENTS/CLAUDE/INSTALL.
+- Real data: 5,803 nodes, 8,275 edges, 8 unmapped links; `qi` both depth 1 = 28 reachable, depth
+  2 = 144; 0 ms query time.
+- Gates: `cargo fmt --check`; clippy clean; `cargo test --all-targets` → 108 unit + 27 integration
+  = 135 passed, 0 failed.
+- No commit made; the semantic enhancement remains separate.
+
+### 2026-11-27 — Phase 7G graph PNG rendering
+
+- Added `src/graph_image.rs` and the `render_graph` tool: layered PNG, labels, green outgoing /
+  blue incoming edges, gold start node, image content block, absolute path, and structured graph
+  metadata.
+- Writes to `--pages-dir` when configured; otherwise the system temporary directory.
+- Real `spleen` outgoing depth-2 image: 1000×1130 PNG.
+- Gates: clippy clean; `cargo test --all-targets` → 110 unit + 28 integration = 138 passed.
+- No commit made.
+
+### 2026-11-27 — Phase 7H appendix networks
+
+- Added `src/dictionary/network.rs`: formula-family edges from explicit prose, formula ingredient
+  edges from `□` lines, and named point-combination records grouped by roles and indications.
+- Added `related_network` and `render_network`; domain filtering and inverse relations keep the
+  three views distinct.
+- Real data: Four Gentlemen → Six/Eight; Four Gentlemen → 5 ingredient medicinals; source/network
+  method → 11 combinations; LU-9 → its Lung combination.
+- Gates: clippy clean; `cargo test --all-targets` → 114 unit + 29 integration = 143 passed.
+- No commit made.
+
+### 2026-11-27 — Point-combination parser fix
+
+- Fixed multi-line combination lists: role-prefixed and continuation point lines stay in one
+  group; short group headings start a new group; long indication sentences attach to the current
+  group. This removes the shifted context/indication labels in local/distant and transport/alarm
+  lists.
+- Real data: 52 records with shifted context/indication labels → 44 correct groups; `LI-4` →
+  Forehead, Eye, Nose, Mouth and Teeth, Throat, and Upper limbs.
+- Gates: `cargo fmt --check`; clippy clean; `cargo test --all-targets` → 115 unit + 29 integration
+  = 144 passed; `dist` checksums verify.
+- Rebuilt `dist/mcp-chinese-dict-search.exe` (2,351,616 bytes; SHA-256
+  `5926377f70e8a085f881239d6eab177d7b3ffbc20911778054e982c6a05a7c2a`).
+- No commit made.
+
+### 2026-11-27 — Semantic S0–S1 core
+
+- S0: pinned `ureq` 3.5.2 behind the optional `semantic` feature; the default tree has no HTTP
+  client. Added an environment-gated real-Ollama smoke test; it passed against
+  `qwen3-embedding:0.6b` with finite unit vectors. Go decision recorded.
+- S1: added the feature-gated `semantic` module with a fake embedder, deterministic document
+  construction, a flat cosine index with a binary header and atomic save/load, digest-keyed cache
+  paths, identity validation, the 300-point lexical gate, RRF fusion, and `MatchKind::Semantic`.
+- Extracted `content_fingerprint(sources)` for both caches and exposed it on `Dictionary`.
+- Gates: fmt; default and feature clippy with `-D warnings`; default tests 115 unit + 29
+  integration = 144; feature tests 142 unit + 30 integration = 172 with local Ollama.
+- No model or HTTP client is required by the default build or suite. No commit made.
+
+### 2026-11-27 — Semantic S2–S3 implementation
+
+- Added the loopback Ollama client, model profiles, batched index build, digest validation,
+  `spawn_blocking` search path, digest re-checks, lifecycle flags, and the local evaluation
+  harness.
+- README, `dist/INSTALL.md`, `BUILDING.md`, `PLAN.md`, and the MCP configuration example document
+  the optional feature, update procedure, withdrawal/rollback rule, and loopback-only boundary.
+- Feature suite: 169 unit + 31 integration = 200 passed; both clippy configurations clean.
+- Real lexical baseline on 30 local queries: recall@5 0.233, MRR 0.183, p50 149 ms, p95 185 ms.
+- No commit made.
+
+### 2026-11-27 — Phase 7I semantic evaluation and acceptance
+
+- Built the real `embeddinggemma:latest` index: 7,042 documents, 768 dimensions, 20.66 MiB,
+  816 s; `--check-semantic` reports `status: active`.
+- 30-query English/mixed set: hybrid recall@5 0.5667 vs lexical 0.2333, MRR 0.4550 vs 0.1833,
+  top-1 0.4000 vs 0.1333; added p95 75 ms; MCP RSS +20.66 MB; model + index 642 MB.
+- Exact/pinyin/Chinese regression set: both modes 1.0 recall@5/MRR/top-1, zero top-1 changes.
+- Optimization: fusion reuses one full ranked lexical result and resolves hits through hash maps,
+  removing a second lexical search and O(candidates × entries) scans without changing metrics.
+- `bge-m3` full-index comparison was stopped as impractical at 8K on this CPU; direct probes and
+  build feasibility are recorded in `ENHANCEMENT-CHECKLIST.md` (S4.7).
+- Decision: accepted with documented limits. Version bumped to 0.6.0; final gates and bundle
+  remain.
+- No commit made.
+
 ---
 
 ## Completed external input
@@ -975,7 +1107,8 @@ Recommended defaults are in `PLAN.md` §16. Checked when the user confirmed or a
 the user's instruction to start executing the plan on 2026-11-24 accepted these defaults.
 
 - [x] Data source supports both zip and extracted directory (recommended).
-- [x] Tool surface stays at two tools: `search_dictionary` and `get_entry` (recommended).
+- [x] Tool surface: `search_dictionary`, `get_entry`, `related_entries`, `render_graph`,
+  `related_network`, and `render_network`.
 - [x] Appendix augmentation is query/headword/identifier driven, plus point IDs found in bodies
   (recommended).
 - [x] `See …` redirects are followed automatically for one hop (recommended).

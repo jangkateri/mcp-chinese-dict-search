@@ -12,9 +12,19 @@ governs how an agent must query the dictionary and cite what it returns.
     `mcp__chinese-medicine-dictionary__search_dictionary`.
   - `get_entry` — `chinese-medicine-dictionary_get_entry` or
     `mcp__chinese-medicine-dictionary__get_entry`.
+  - `related_entries` — follow resolved cross-references from a main entry; `direction` is
+    `outgoing`, `incoming`, or `both`; `depth` is 1–3.
+  - `render_graph` — draw that neighborhood as a PNG and return an absolute file path.
+  - `related_network` — formula, medicinal, or point-combination appendix relationships;
+    `domain` is `formula`, `medicinal`, or `point_combination`.
+  - `render_network` — render an appendix network as a PNG.
+- Use `related_network` for formula derivation, formula ingredients, or named point combinations.
+  It does not expose arbitrary co-occurrence in prose as a relationship.
 - Do **not** open, read, grep, or ripgrep the dictionary data directory for content. The server
   resolves aliases, pinyin, Chinese characters, anchors, redirects, and appendix identifiers; a raw
   read bypasses all of that and produces unclickable citations.
+- Use `related_entries` for "what connects to this entry" questions. It covers main dictionary
+  entries, not appendix entries; use `get_entry` for an appendix monograph.
 - If the MCP tools are unavailable, say so. Do not fall back to reading the data directory.
 
 ## Copy the citation the server returns

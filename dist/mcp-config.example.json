@@ -8,6 +8,19 @@
         "--pages-dir",
         "C:/mcp-dict-pages"
       ]
+    },
+    "chinese-medicine-dictionary-semantic": {
+      "command": "C:/path/to/semantic/mcp-chinese-dict-search.exe",
+      "args": [
+        "--data",
+        "C:/path/to/mcp-dict-data",
+        "--pages-dir",
+        "C:/mcp-dict-pages",
+        "--embedding-model",
+        "embeddinggemma:latest",
+        "--ollama-url",
+        "http://127.0.0.1:11434"
+      ]
     }
   }
 }

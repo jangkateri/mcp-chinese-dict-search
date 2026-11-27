@@ -2,10 +2,12 @@
 
 pub mod appendix;
 mod fuzzy;
+pub(crate) mod graph;
 pub mod index;
 pub mod linked;
 mod lookup;
 pub mod model;
+pub(crate) mod network;
 pub mod normalize;
 pub mod parse;
 pub mod pinyin;
@@ -19,9 +21,11 @@ use crate::error::DictionaryError;
 
 pub use linked::{LinkReport, build_linked_data};
 pub use model::{
-    Alias, AnchorTarget, AppendixEntry, AppendixRef, Entry, EntryAliases, EntryRequest,
-    EntryResponse, Link, LoadReport, LookupRef, MatchKind, RelatedEntry, Scope, SearchHit,
-    SearchRequest, SearchResponse, Section, Source, Suggestion,
+    Alias, AnchorTarget, AppendixEntry, AppendixRef, EdgeDirection, Entry, EntryAliases,
+    EntryRequest, EntryResponse, GraphDirection, GraphImageResponse, GraphNode, GraphRequest,
+    GraphResponse, Link, LoadReport, LookupRef, MatchKind, NetworkDomain, NetworkImageResponse,
+    NetworkNode, NetworkNodeType, NetworkRelation, NetworkRequest, NetworkResponse, RelatedEntry,
+    Scope, SearchHit, SearchRequest, SearchResponse, Section, Source, Suggestion,
 };
 
 /// Sidecar written into a linked copy so citations keep the source title.
@@ -35,6 +39,8 @@ pub struct Dictionary {
     pub(crate) entries: Vec<Entry>,
     pub(crate) by_headword: HashMap<String, Vec<usize>>,
     pub(crate) anchors: HashMap<String, AnchorTarget>,
+    pub(crate) graph: graph::Graph,
+    pub(crate) network: network::Network,
     pub(crate) meridians: Vec<AppendixEntry>,
     pub(crate) medicinals: Vec<AppendixEntry>,
     pub(crate) formulas: Vec<AppendixEntry>,
@@ -46,6 +52,8 @@ pub struct Dictionary {
     pub(crate) pinyin_toned: HashMap<String, Vec<LookupRef>>,
     pub(crate) pinyin_toneless: HashMap<String, Vec<LookupRef>>,
     pub(crate) han: HashMap<String, Vec<LookupRef>>,
+    /// Content fingerprint shared by the lookup cache and the semantic index.
+    pub(crate) content_fingerprint: String,
     /// Absolute directory of an extracted source, for clickable file:line
     /// citations. `None` when the dictionary came from a zip.
     pub(crate) data_root: Option<PathBuf>,
@@ -64,6 +72,11 @@ impl Dictionary {
     /// Display name used in citations and server instructions.
     pub fn title(&self) -> &str {
         &self.title
+    }
+
+    /// Stable fingerprint of the Markdown sources, shared by cache layouts.
+    pub fn content_fingerprint(&self) -> &str {
+        &self.content_fingerprint
     }
 
     /// Load and index the archive or extracted directory at `path`, caching the
@@ -112,8 +125,10 @@ impl Dictionary {
         rebuild_cache: bool,
     ) -> Result<Self, DictionaryError> {
         let mut sources = source::read_sources(path)?;
+        let content_fingerprint = lookup::content_fingerprint(&sources);
         let mut dictionary = Self {
             title: resolved_title(path, title),
+            content_fingerprint,
             ..Self::default()
         };
         if path.is_dir() {
@@ -145,6 +160,11 @@ impl Dictionary {
         dictionary.report.unresolved_links = unresolved;
         dictionary.report.anchorless_entries = anchorless;
         dictionary.anchors = index_data.anchors;
+        let (graph, graph_stats) = graph::Graph::build(&dictionary.entries);
+        dictionary.graph = graph;
+        dictionary.report.graph_nodes = graph_stats.nodes;
+        dictionary.report.graph_edges = graph_stats.edges;
+        dictionary.report.graph_unmapped_links = graph_stats.unmapped_links;
 
         let anchorless_examples: Vec<String> = dictionary
             .entries
@@ -189,6 +209,11 @@ impl Dictionary {
         dictionary.report.weight_sections = dictionary.weights.len();
 
         dictionary.build_indexes();
+        let (network, network_stats) = network::Network::build(&dictionary);
+        dictionary.network = network;
+        dictionary.report.network_formula_edges = network_stats.formula_edges;
+        dictionary.report.network_formula_medicinal_edges = network_stats.formula_medicinal_edges;
+        dictionary.report.network_point_combinations = network_stats.point_combinations;
         dictionary.report.distinct_headwords = dictionary.by_headword.len();
         dictionary.report.duplicate_headwords = dictionary
             .report
@@ -380,6 +405,17 @@ impl Dictionary {
 
     pub fn entry(&self, request: &EntryRequest) -> Result<EntryResponse, DictionaryError> {
         search::entry(self, request)
+    }
+
+    pub fn related(&self, request: &GraphRequest) -> Result<GraphResponse, DictionaryError> {
+        graph::related(self, request)
+    }
+
+    pub fn related_network(
+        &self,
+        request: &NetworkRequest,
+    ) -> Result<NetworkResponse, DictionaryError> {
+        self.network.related(self, request)
     }
 }
 

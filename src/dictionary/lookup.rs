@@ -57,11 +57,12 @@ struct LookupCacheRef<'a> {
     han: &'a HashMap<String, Vec<LookupRef>>,
 }
 
-/// A stable content fingerprint for the Markdown that produces the indices.
+/// A stable fingerprint of the Markdown source content alone.
 ///
-/// FNV-1a is used as a cache key, not as a security primitive. The cache is
-/// regenerated whenever the fingerprint changes.
-pub(crate) fn fingerprint(sources: &Sources) -> String {
+/// Both the lookup cache and the semantic index use this function, so a
+/// change in the source data invalidates both. FNV-1a is used as a cache key,
+/// not as a security primitive.
+pub(crate) fn content_fingerprint(sources: &Sources) -> String {
     let mut documents: Vec<(&str, &str)> = Vec::new();
     for (name, content) in &sources.main {
         documents.push((name, content));
@@ -78,17 +79,25 @@ pub(crate) fn fingerprint(sources: &Sources) -> String {
     documents.sort_by(|left, right| left.0.cmp(right.0).then_with(|| left.1.cmp(right.1)));
 
     let mut hash = FNV_OFFSET;
-    hash_bytes(
-        &mut hash,
-        format!("lookup-cache-v{CACHE_VERSION}").as_bytes(),
-    );
-    hash_bytes(&mut hash, &[0]);
     for (name, content) in documents {
         hash_bytes(&mut hash, name.as_bytes());
         hash_bytes(&mut hash, &[0]);
         hash_bytes(&mut hash, content.as_bytes());
         hash_bytes(&mut hash, &[0]);
     }
+    format!("{hash:016x}")
+}
+
+/// The lookup-cache fingerprint: the content fingerprint plus the cache
+/// layout version, so an index-format change invalidates the cache too.
+pub(crate) fn fingerprint(sources: &Sources) -> String {
+    let mut hash = FNV_OFFSET;
+    hash_bytes(
+        &mut hash,
+        format!("lookup-cache-v{CACHE_VERSION}").as_bytes(),
+    );
+    hash_bytes(&mut hash, &[0]);
+    hash_bytes(&mut hash, content_fingerprint(sources).as_bytes());
     format!("{hash:016x}")
 }
 
@@ -401,6 +410,9 @@ mod tests {
         assert_eq!(fingerprint(&first), fingerprint(&same));
         assert_ne!(fingerprint(&first), fingerprint(&changed));
         assert_eq!(fingerprint(&first).len(), 16);
+        assert_eq!(content_fingerprint(&first), content_fingerprint(&same));
+        assert_ne!(content_fingerprint(&first), content_fingerprint(&changed));
+        assert_eq!(content_fingerprint(&first).len(), 16);
     }
 
     #[test]

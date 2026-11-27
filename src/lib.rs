@@ -21,12 +21,15 @@ pub mod cli;
 pub mod config;
 pub mod dictionary;
 pub mod error;
+pub(crate) mod graph_image;
 pub mod logging;
 pub mod pages;
 pub mod prompts;
 pub mod protocol;
 pub mod resources;
 pub mod schema;
+#[cfg(feature = "semantic")]
+pub mod semantic;
 pub mod server;
 pub mod tools;
 pub mod transport;

@@ -2,20 +2,27 @@
 
 An [MCP](https://modelcontextprotocol.io) stdio server, written in Rust, for **A Practical
 Dictionary of Chinese Medicine** and its four appendices. It parses the Markdown dictionary
-locally, resolves the book's cross-references through its index, ranks results, and exposes two
+locally, resolves the book's cross-references through its index, ranks results, and exposes three
 tools:
 
 - `search_dictionary` — ranked hits across headwords, Chinese characters, pinyin, definitions,
   acupuncture points, herbs, formulas, and weights/measures;
 - `get_entry` — one exact entry with aliases, full text, resolved cross-references, and related
-  acupuncture-point monographs.
+  acupuncture-point monographs;
+- `related_entries` — follow the resolved cross-references from one entry, in either direction, up
+  to three hops;
+- `render_graph` — draw that neighborhood as a PNG and return its absolute path;
+- `related_network` — formula families, formula-medicinal composition, or named point
+  combinations;
+- `render_network` — draw an appendix network as a PNG.
 
 ## Data and copyright
 
 This repository **does not contain dictionary data**. You supply a dictionary archive (`.zip`) or
 its extracted Markdown directory in the layout described in [`PLAN.md`](PLAN.md). The data may be
 copyrighted; do not commit the archive, extracted Markdown, images, or an EPUB to a public
-repository. The server reads local files only and makes no network requests.
+repository. The default build reads local files only and makes no network requests; the optional
+`semantic` feature calls only the configured loopback Ollama server.
 
 The generated lookup cache is also derived from the dictionary data. It is written beside the dictionary
 (or into `--cache-dir`) and matched by `.gitignore`; keep it out of git and `dist/`.
@@ -30,7 +37,11 @@ The generated lookup cache is also derived from the dictionary data. It is writt
 | Index-based anchor and cross-reference resolution | Implemented; unresolved fragments are reported, never fatal |
 | Generated pinyin and Han lookup indices | Cached by dictionary title + content fingerprint; tone-numbered, tone-marked, toneless, simplified, and traditional forms |
 | `search_dictionary`, `get_entry` | Implemented |
-| Tests | 100 unit + 26 integration tests pass; `clippy -D warnings` clean |
+| `related_entries` graph traversal | Implemented over resolved cross-references; depth 1–3, limit 1–50 |
+| `render_graph` PNG rendering | Implemented; writes to `--pages-dir` or the system temp directory |
+| Appendix networks | `related_network` / `render_network`: formula derivation, formula ingredients, named point combinations |
+| Optional semantic fallback | Feature-gated `semantic` build; gated hybrid retrieval over a local Ollama embedding model; off by default and loopback-only |
+| Tests | Unit and integration tests pass; `clippy -D warnings` clean |
 | Performance (Windows, development machine) | measured on the reference corpus; representative tool calls are sub-second |
 
 The layout was validated against a reference conversion; no dictionary text is in the repository.
@@ -39,7 +50,10 @@ The layout was validated against a reference conversion; no dictionary text is i
 
 - Rust and Cargo **1.99.0** (edition 2024).
 - The dictionary archive or its extracted directory.
-- No network access, daemon, API key, or external service.
+- No network access, daemon, API key, or external service for the default build. The optional
+  `semantic` feature additionally requires a local **Ollama** server on loopback and an embedding
+  model such as `embeddinggemma:latest` (CPU-friendly) or `qwen3-embedding:0.6b` (stronger
+  non-exact Chinese separation on CPU-tested pairs).
 
 ## Quick start
 
@@ -176,8 +190,12 @@ generated file contains `[]`, replace that `[]` with the block rather than appen
           - 'C:/path/to/mcp-dict-pages'
 ```
 
-The tools register as `mcp__chinese-medicine-dictionary__search_dictionary` and
-`mcp__chinese-medicine-dictionary__get_entry`. `dsh --profile <profile> --dump-config` shows whether
+The tools register as `mcp__chinese-medicine-dictionary__search_dictionary`,
+`mcp__chinese-medicine-dictionary__get_entry`,
+`mcp__chinese-medicine-dictionary__related_entries`,
+`mcp__chinese-medicine-dictionary__render_graph`,
+`mcp__chinese-medicine-dictionary__related_network`, and
+`mcp__chinese-medicine-dictionary__render_network`. `dsh --profile <profile> --dump-config` shows whether
 the entry was composed. DSH 0.2.x ships the client; do not install `@deepseek-ai/dsh-mcp-client`
 separately. DSH supports MCP tools and resources, but not prompt templates, so the `citation` prompt
 is unavailable there; the server instruction `tcm citation <anchor>` still maps to `get_entry`.
@@ -301,6 +319,94 @@ source="meridian")` and `get_entry("足三里", source="meridian")` both return 
 If no entry matches, the tool returns an `isError` result with up to five suggestions; malformed
 arguments are JSON-RPC `-32602` errors.
 
+### `related_entries`
+
+| Argument | Type | Default | Notes |
+|---|---|---|---|
+| `term` | string, required | — | Main dictionary headword, alias, pinyin, Chinese, or citation anchor. |
+| `direction` | string enum, optional | `both` | `outgoing` (entries this entry references), `incoming` (entries that reference it), or `both`. |
+| `depth` | integer, optional | 1 | 1–3 hops. |
+| `limit` | integer, optional | 20 | 1–50 returned entries. |
+
+The graph contains main dictionary entries and the cross-references the parser resolved. Appendix
+entries are not graph nodes; use `get_entry` for those. Each returned node carries its distance,
+edge direction, the `via` entry, the visible link text, and the same canonical and absolute
+citations as the other tools. Cycles are visited once, and results are ordered by distance then
+book order.
+
+```json
+{
+  "query": "qi",
+  "term": "qi4",
+  "direction": "both",
+  "depth": 1,
+  "nodes": [
+    {
+      "source": "dictionary",
+      "term": "channel qi4",
+      "anchor": "a1PDH",
+      "file": "23-p.md",
+      "citation": "Dictionary, 23-p.md#a1PDH",
+      "distance": 1,
+      "edge_direction": "outgoing",
+      "via": "qi4",
+      "link_text": "channel qi4",
+      "redirect": false
+    }
+  ],
+  "total": 1,
+  "truncated": false
+}
+```
+
+`truncated` is true when `limit` or the internal 10,000-node safety cap cuts the result.
+
+### `render_graph`
+
+The same arguments as `related_entries`, rendered as a PNG:
+
+```json
+{"term":"spleen","direction":"outgoing","depth":2,"limit":20}
+```
+
+The result contains:
+
+- a text summary and an absolute `Image: <path>` line;
+- an MCP `image` block containing the PNG;
+- `structuredContent` with the graph, image path, MIME type, width, and height.
+
+The file is written to `--pages-dir` when configured, otherwise to the system temporary directory.
+The image uses a simple column-per-hop layout: gold start node, green outgoing edges, blue incoming
+edges, and labels from the 8x8 bitmap font. Long terms are truncated; use `get_entry` for full text.
+PNG is used because text and thin edges remain readable; JPEG would introduce compression artifacts.
+
+### `related_network`
+
+| Argument | Type | Default | Notes |
+|---|---|---|---|
+| `term` | string, required | — | Formula, medicinal, point, or named point-combination entry. |
+| `domain` | string enum, required | — | `formula`, `medicinal`, or `point_combination`. |
+| `direction` | string enum, optional | `both` | `outgoing`, `incoming`, `both`. |
+| `depth` | integer, optional | 1 | 1–3. |
+| `limit` | integer, optional | 20 | 1–50. |
+
+Domains:
+
+- **`formula`** — formula-to-formula derivation from explicit prose:
+  “This is X with the addition of…”, “combined with…”, “variant of…”.
+- **`medicinal`** — formula ingredient lines (`□`) mapped to appendix-2 medicinal entries.
+- **`point_combination`** — named `combining … points` entries parsed into combination records.
+  Each record lists its point IDs/roles and indication; point→combination and method→combination
+  edges are available.
+
+Every returned node has a `node_type`, `relation`, `label`, absolute `Source:` line when available,
+and a citation. Edges are book relationships, not clinical equivalence.
+
+### `render_network`
+
+Same arguments as `related_network`; writes a PNG to `--pages-dir` or the system temporary directory,
+returns an MCP image block, an absolute `Image:` line, and structured network metadata.
+
 ## Resources and prompt
 
 Every entry is also addressable as an **MCP resource**, so a citation can be read without a tool
@@ -363,8 +469,8 @@ MCP nor a client defect — only text the model copied from the tool result is c
 
 Tell the model, in its instruction file or in the prompt, to:
 
-- call `chinese-medicine-dictionary`'s `search_dictionary` / `get_entry` instead of reading the
-  dictionary folder with the client's own `Read`, `rg`, or `grep` tools;
+- call `chinese-medicine-dictionary`'s `search_dictionary`, `get_entry`, or `related_entries`
+  instead of reading the dictionary folder with the client's own `Read`, `rg`, or `grep` tools;
 - copy the tool's `Source:` and `Entry page:` lines verbatim, as absolute paths;
 - never write a bare relative citation, and never emit `file:///` links in prose (VS Code ignores
   them).
@@ -440,12 +546,82 @@ nothing; rebuild it after changing the source data. A linked copy also carries a
 | `--pages-dir <path>` | `MCP_CHINESE_DICT_PAGES_DIR` | off | Write a Markdown page per `get_entry` result here and name it in the result, so citations can be clicked. Use a path without spaces. |
 | `--build-indices` | — | off | Rebuild the pinyin and Han lookup indices, write the cache, and exit without serving stdio. |
 | `--build-linked-data <dir>` | — | off | Copy the Markdown set into `<dir>`, insert the index anchors the conversion dropped, verify entries and links, and exit without serving. Point `--data` at the copy. |
+| `--ollama-url <url>` | `MCP_CHINESE_DICT_OLLAMA_URL` | `http://127.0.0.1:11434` | Loopback Ollama base URL; remote hosts and Ollama Cloud are rejected. |
+| `--embedding-model <name>` | `MCP_CHINESE_DICT_EMBEDDING_MODEL` | off | Ollama embedding model; supplying it enables gated hybrid retrieval. |
+| `--embedding-profile <path>` | `MCP_CHINESE_DICT_EMBEDDING_PROFILE` | built-in | Optional JSON override for query/document prefixes, instruction, `min_similarity`, `num_ctx`, and input guard. |
+| `--semantic-index <path>` | `MCP_CHINESE_DICT_SEMANTIC_INDEX` | digest-keyed beside the cache | Override the semantic index path. |
+| `--build-semantic-index` | — | off | Build a digest-keyed semantic index and exit. Requires `--embedding-model`. |
+| `--check-semantic` | — | off | Print model, digest, dimensions, expected index, record count, status, and remediation. Never writes. |
+| `--prune-semantic-index` | — | off | List semantic indexes that do not match the current model and digest; with `--yes`, remove them. |
+| `--require-semantic` | `MCP_CHINESE_DICT_REQUIRE_SEMANTIC` | off | Fail startup if Ollama or the index is unavailable; default is lexical fallback. |
+| `--yes` | — | off | Confirm pruning. |
 | `--verbose` | — | off | Log request handling, timing, and the load report. |
 | `-h`, `--help`, `--version` | — | — | Printed before an MCP client is attached. |
 
 stdout carries JSON-RPC only; every diagnostic goes to stderr. The server negotiates the legacy
 protocol era (`2025-11-25`), and answers `server/discover` with `-32601` so 2026-era clients fall
 back to `initialize`.
+
+## Semantic retrieval (optional)
+
+The default build is lexical-only and links no HTTP client. A build with `--features semantic`
+adds a gated fallback for paraphrases that share no token with the entry:
+
+1. Lexical search runs first and alone.
+2. The embedding model is consulted only when the best lexical score is **below 300**; exact
+   anchors, exact pinyin, exact Han, and strong lexical hits never embed.
+3. Pure pinyin queries stay on the pinyin/fuzzy path and never embed.
+4. Semantic candidates are merged with reciprocal-rank fusion (`k = 60`); semantic-only hits are
+   labelled `semantic` and score 200–299. Lexical hits at ≥600 are pinned ahead.
+5. If Ollama is down, the model is missing, the index is stale, or an embedding fails, the response
+   is the normal lexical response (unless `--require-semantic` made startup fail).
+
+Only loopback Ollama is accepted (`127.0.0.1`, `localhost`, `::1`). Ollama Cloud and other remote
+hosts are rejected. The MCP process holds no model weights; Ollama owns the model session.
+
+Build and serve:
+
+```sh
+cargo build --release --features semantic
+
+# Confirm the model, digest, dimensions, and index status; never writes.
+mcp-chinese-dict-search --data "C:/mcp-dict-data" \
+  --embedding-model embeddinggemma:latest --check-semantic
+
+# Build the digest-keyed index (the old index is retained).
+mcp-chinese-dict-search --data "C:/mcp-dict-data" \
+  --embedding-model embeddinggemma:latest --build-semantic-index
+
+# Serve with the fallback enabled.
+mcp-chinese-dict-search --data "C:/mcp-dict-data" \
+  --embedding-model embeddinggemma:latest
+```
+
+The index path is derived from the dictionary content fingerprint, model name, and the first 16
+hex characters of the model digest. A new digest never overwrites the last known-good index. Use
+`--check-semantic` after `ollama pull`, rebuild, evaluate, switch the configuration, and only then
+`--prune-semantic-index --yes`. Vectors are never reused across model digests.
+
+A model already pulled into the local Ollama store remains usable even if the registry withdraws
+it. Do not `ollama rm` the last known-good model or delete its index until a replacement has been
+built and accepted. If the local model is gone and the registry no longer serves it, choose a
+replacement, build a new digest-keyed index, evaluate, then update the client configuration. There
+is no vector-conversion path; a model backup, if operationally required, belongs outside this
+repository.
+
+Model profiles pin query formatting and `num_ctx`: Qwen3 uses its instruction and 4K context;
+`embeddinggemma` uses 2K; `bge-m3` uses 8K; `nomic-embed-text` uses its query/document prefixes.
+On CPU-only hosts, `embeddinggemma` indexes substantially faster than Qwen3; the local evaluation
+used `embeddinggemma:latest` for that reason.
+`--embedding-profile` can override the prefix, instruction, `min_similarity`, `num_ctx`, and input
+guard. `min_similarity` does not require re-embedding; changing a prefix, instruction, or context
+does.
+
+On a local 30-query English/mixed paraphrase set with `embeddinggemma:latest`, hybrid recall@5
+rose from 0.23 to 0.57 and MRR from 0.18 to 0.46; added p95 was 75 ms and the MCP working set grew
+by 21 MB. The exact/pinyin/Chinese regression set stayed at top-1 1.0, because those queries close
+the gate before embedding. These are measurements on one corpus and one query set, not a general
+quality claim.
 
 ## Architecture
 
@@ -463,7 +639,8 @@ transport::serve ──► protocol::classify_message ──► server::McpServe
                                                 ├── main entries
                                                 ├── index anchors
                                                 ├── appendix entries
-                                                └── ranking + link resolution
+                                                ├── ranking + link resolution
+                                                └── graph adjacency (resolved links)
                                                          │
 stdout ◄── transport::write_message ◄── result_response / error_response
 ```
@@ -477,8 +654,12 @@ Key decisions:
 - Appendix routing is semantic, because only four links anywhere point at appendix files.
 - Pinyin and Han lookup indices are generated from the archive's aliases on first startup and
   cached by dictionary title + content fingerprint; the cache stays out of git and `dist/`.
-- Output is bounded: 5 hits by default, 20,000 characters per entry by default.
-- No network, database, embedding model, or external service is used.
+- The graph is built once from resolved `Entry.links`; it adds outgoing and incoming adjacency,
+  not inferred relations.
+- Output is bounded: 5 search hits, 20 graph nodes, 20,000 characters per entry by default.
+- The default build uses no network, database, embedding model, or external service. The optional
+  `semantic` feature calls only the configured loopback Ollama HTTP endpoint, from a blocking
+  worker so the async transport is not stalled.
 
 ## Project layout
 
@@ -488,14 +669,20 @@ mcp-chinese-dict-search/
 │   ├── main.rs / lib.rs
 │   ├── cli.rs / config.rs / error.rs / logging.rs
 │   ├── protocol.rs / server.rs / transport.rs / tools.rs
-│   └── dictionary/
+│   ├── graph_image.rs            # PNG rendering of a graph result
+│   ├── dictionary/
 │       ├── mod.rs / model.rs / normalize.rs / source.rs / parse.rs
 │       ├── index.rs / appendix.rs / search.rs / pinyin.rs / lookup.rs
+│       ├── graph.rs
+│       └── network.rs            # formulas, medicinals, point combinations
+│   └── semantic/                 # optional `semantic` feature
+│       ├── document.rs / embedder.rs / index.rs / fusion.rs
+│       ├── profiles.rs / ollama.rs / build.rs / engine.rs / startup.rs
 ├── tests/
 │   ├── support/mod.rs
 │   ├── support/fixture.rs       # invented corpus, written at test time
-│   ├── stdio_contract.rs / tools_e2e.rs / real_archive.rs / dist_bundle.rs
-├── tools/                       # read-only source-data analysis scripts
+│   ├── stdio_contract.rs / tools_e2e.rs / real_data.rs / dist_bundle.rs
+├── tools/                       # read-only analysis and local evaluation scripts
 ├── dist/                        # Windows x64 deployment bundle
 ├── PLAN.md / CHECKLIST.md / CLAUDE.md
 ├── Cargo.toml / Cargo.lock / rustfmt.toml
@@ -508,11 +695,29 @@ mcp-chinese-dict-search/
 cargo fmt --check
 cargo clippy --all-targets -- -D warnings
 cargo test --all-targets
+
+# Optional semantic feature; no model is needed for the unit suite.
+cargo clippy --all-targets --features semantic -- -D warnings
+cargo test --all-targets --features semantic
 ```
 
-The tests need no network. `tests/real_archive.rs` runs the golden counts against the real archive
-when it is present (repository root or `MCP_CHINESE_DICT_DATA`); otherwise it prints a skip reason.
-The fixture suite is hermetic.
+The default tests need no network. `tests/real_data.rs` checks the configured dictionary when
+`MCP_CHINESE_DICT_DATA` is set; otherwise it prints a skip reason. `tests/semantic_gate.rs` and
+`tests/semantic_real.rs` skip with a reason unless the Ollama environment variables are set; the
+fixture suite is hermetic.
+
+`tools/evaluate_semantic.py` drives the stdio server and reports lexical and hybrid recall@5, MRR,
+top-1, and p50/p95 latency for a local JSON query set. Keep a query set derived from the
+dictionary out of git; pass it by path:
+
+```sh
+python -I tools/evaluate_semantic.py \
+  --exe target/release/mcp-chinese-dict-search.exe \
+  --data "C:/ProgramData/mcp-dict-data" \
+  --cache-dir "C:/ProgramData/mcp-dict-semantic" \
+  --queries "C:/ProgramData/mcp-dict-semantic/queries.json" \
+  --embedding-model embeddinggemma:latest
+```
 
 ## Known limitations
 
@@ -520,9 +725,25 @@ The fixture suite is hermetic.
   `food diarrhea2`, `provisioning aspect`, and `provisioning, defense, qi4, and blood`. They are
   searchable and cite `file:line`.
 - Appendix-4 output renders tables as text rows, not as a formatted table.
+- `related_entries` covers main dictionary entries only; appendix entries are not graph nodes.
+  It follows resolved cross-references and does not infer relations from prose. Links whose target
+  cannot be mapped are excluded and counted as `graph_unmapped_links` in the `--verbose` load
+  report (8 on the reference corpus).
+- `render_graph` uses a simple layered layout and an ASCII bitmap font. Long labels are truncated,
+  and dense depth-2 neighborhoods can require a high `limit` before second-hop nodes fit.
+- Appendix network edges are extracted from explicit formula prose, ingredient lines, and named
+  point-combination entries. Formula-family edges are the least structured: they are relation
+  candidates with source lines, not manually reviewed facts. Formula ingredients include stated
+  alternatives where one ingredient line offers a choice.
 - Additional books and a research/RAG mode remain deferred; see `PLAN.md` §15.
 - A toneless pinyin query can be ambiguous (`qi` matches qì and qí); exact entries are ranked
   first, and the caller can add the tone number to disambiguate.
+- Semantic retrieval requires a separate feature build, a local Ollama server, an installed
+  embedding model, and a built index. It is not a substitute for exact terminology, and pure
+  pinyin is deliberately excluded because tested models did not separate related and unrelated
+  pinyin pairs reliably.
+- A semantic index is model- and digest-specific. Pulling an updated tag invalidates it; rebuild
+  rather than migrate vectors. The server never silently reuses a stale index.
 
 ## License
 

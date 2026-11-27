@@ -1,4 +1,4 @@
-//! End-to-end tests for both tools over the real stdio transport, using the
+//! End-to-end tests for every tool over the real stdio transport, using the
 //! synthetic fixture dictionary.
 
 mod support;
@@ -244,6 +244,173 @@ fn scope_filters_and_not_found_results_are_handled() {
             .unwrap()
             .contains("No entry matches")
     );
+}
+
+#[test]
+fn related_entries_follows_resolved_cross_references() {
+    let (responses, _) = run(vec![
+        call_tool(
+            2,
+            "related_entries",
+            json!({"term":"alpha","direction":"outgoing","depth":1}),
+        ),
+        call_tool(
+            3,
+            "related_entries",
+            json!({"term":"alpha","direction":"incoming","depth":1}),
+        ),
+        call_tool(
+            4,
+            "related_entries",
+            json!({"term":"alpha","direction":"both","depth":2,"limit":20}),
+        ),
+        call_tool(
+            5,
+            "related_entries",
+            json!({"term":"alpha","direction":"both","depth":1,"limit":1}),
+        ),
+        call_tool(
+            6,
+            "related_entries",
+            json!({"term":"alpha swelling","direction":"outgoing","depth":1}),
+        ),
+        call_tool(7, "related_entries", json!({"term":"AA-1"})),
+        call_tool(
+            8,
+            "related_entries",
+            json!({"term":"alpha","direction":"sideways"}),
+        ),
+        call_tool(9, "related_entries", json!({"term":"alpha","depth":4})),
+    ]);
+
+    let outgoing = structured(response_for(&responses, 2));
+    assert_eq!(outgoing["term"], "alpha");
+    assert_eq!(outgoing["direction"], "outgoing");
+    assert_eq!(outgoing["total"], 1);
+    assert_eq!(outgoing["nodes"][0]["term"], "greater alpha");
+    assert_eq!(outgoing["nodes"][0]["edge_direction"], "outgoing");
+    assert_eq!(outgoing["nodes"][0]["anchor"], "a1BET");
+    assert_eq!(outgoing["nodes"][0]["via"], "alpha");
+    assert_eq!(outgoing["nodes"][0]["link_text"], "greater alpha");
+    assert!(
+        outgoing["nodes"][0]["source_file"]
+            .as_str()
+            .unwrap()
+            .ends_with("14-g.md")
+    );
+
+    let incoming = structured(response_for(&responses, 3));
+    assert_eq!(incoming["total"], 1);
+    assert_eq!(incoming["nodes"][0]["term"], "alpha alias");
+    assert_eq!(incoming["nodes"][0]["edge_direction"], "incoming");
+
+    let both = structured(response_for(&responses, 4));
+    assert_eq!(both["total"], 2);
+    assert_eq!(both["nodes"][0]["term"], "alpha alias");
+    assert_eq!(both["nodes"][1]["term"], "greater alpha");
+    assert_eq!(both["truncated"], false);
+
+    let limited = structured(response_for(&responses, 5));
+    assert_eq!(limited["nodes"].as_array().unwrap().len(), 1);
+    assert_eq!(limited["total"], 2);
+    assert_eq!(limited["truncated"], true);
+
+    let swelling = structured(response_for(&responses, 6));
+    assert_eq!(swelling["nodes"][0]["term"], "clear heat");
+    assert_eq!(swelling["nodes"][0]["anchor"], "a1CHT");
+
+    let text = response_for(&responses, 2)["result"]["content"][0]["text"]
+        .as_str()
+        .expect("related text");
+    assert!(text.contains("Source: "), "{text}");
+    assert!(text.contains("14-g.md"), "{text}");
+    assert!(
+        !text.contains("14-g.md#"),
+        "tool text has no bare relative citation: {text}"
+    );
+
+    let appendix = &response_for(&responses, 7)["result"];
+    assert_eq!(appendix["isError"], true);
+    assert!(
+        appendix["content"][0]["text"]
+            .as_str()
+            .unwrap()
+            .contains("main dictionary entry")
+    );
+
+    assert_eq!(response_for(&responses, 8)["error"]["code"], -32602);
+    assert!(
+        response_for(&responses, 8)["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("outgoing, incoming, both")
+    );
+    assert_eq!(response_for(&responses, 9)["error"]["code"], -32602);
+    assert!(
+        response_for(&responses, 9)["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("between 1 and 3")
+    );
+}
+
+#[test]
+fn render_graph_returns_a_png_and_an_absolute_path() {
+    let (responses, _) = run(vec![call_tool(
+        2,
+        "render_graph",
+        json!({"term":"alpha","direction":"both","depth":1,"limit":2}),
+    )]);
+
+    let result = &response_for(&responses, 2)["result"];
+    let content = result["content"].as_array().expect("content blocks");
+    assert_eq!(content[0]["type"], "text");
+    assert!(content[0]["text"].as_str().unwrap().contains("Image: "));
+    let image = &content[1];
+    assert_eq!(image["type"], "image");
+    assert_eq!(image["mimeType"], "image/png");
+    let encoded = image["data"].as_str().expect("base64 image data");
+    let decoded = base64::Engine::decode(&base64::engine::general_purpose::STANDARD, encoded)
+        .expect("image data decodes");
+    assert!(decoded.starts_with(b"\x89PNG\r\n\x1a\n"));
+
+    let structured = structured(response_for(&responses, 2));
+    assert_eq!(structured["mime_type"], "image/png");
+    assert_eq!(structured["graph"]["total"], 2);
+    let path = structured["image_path"].as_str().expect("image path");
+    assert!(std::path::Path::new(path).is_absolute());
+    assert!(std::path::Path::new(path).exists());
+}
+
+#[test]
+fn related_network_resolves_formula_domain_and_rejects_bad_domains() {
+    let (responses, _) = run(vec![
+        call_tool(
+            2,
+            "related_network",
+            json!({"term":"Jia Decoction","domain":"formula","depth":1}),
+        ),
+        call_tool(
+            3,
+            "related_network",
+            json!({"term":"Jia Decoction","domain":"not-a-domain"}),
+        ),
+        call_tool(4, "related_network", json!({"term":"Jia Decoction"})),
+    ]);
+
+    let formula = structured(response_for(&responses, 2));
+    assert_eq!(formula["node_type"], "formula");
+    assert_eq!(formula["domain"], "formula");
+    assert_eq!(formula["total"], 0);
+
+    assert_eq!(response_for(&responses, 3)["error"]["code"], -32602);
+    assert!(
+        response_for(&responses, 3)["error"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("formula, medicinal, point_combination")
+    );
+    assert_eq!(response_for(&responses, 4)["error"]["code"], -32602);
 }
 
 #[test]

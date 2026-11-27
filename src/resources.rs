@@ -39,7 +39,7 @@ pub fn definitions() -> Value {
             "uri": ABOUT_URI,
             "name": "dictionary-about",
             "title": "About this dictionary server",
-            "description": "What this server searches, the measured entry counts, its two tools, and its entry-URI \
+            "description": "What this server searches, the measured entry counts, its tools, and its entry-URI \
                 scheme.",
             "mimeType": "text/markdown"
         }
@@ -103,7 +103,8 @@ fn about_text(dictionary: &Dictionary) -> String {
          | Medicinals | {} |\n\
          | Formulas | {} |\n\
          | Weights and measures | {} sections |\n\n\
-         Tools: `search_dictionary`, `get_entry`.\n\n\
+         Tools: `search_dictionary`, `get_entry`, `related_entries`, `render_graph`, \
+         `related_network`, `render_network`.\n\n\
          Resources: `dictionary://entry/<reference>`, where the reference is a citation anchor such as `a1ALP`, \
          a headword, pinyin (`jia3`, `jia gen`), or Chinese (`甲`), percent-encoded where it is not URI-safe.\n\n\
          Prompt: `citation` with a single `reference` argument.",

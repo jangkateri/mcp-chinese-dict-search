@@ -147,7 +147,7 @@ mod tests {
             .collect();
         assert_eq!(lines.len(), 2);
         assert_eq!(lines[0]["result"], json!({}));
-        assert_eq!(lines[1]["result"]["tools"].as_array().unwrap().len(), 2);
+        assert_eq!(lines[1]["result"]["tools"].as_array().unwrap().len(), 6);
     }
 
     #[tokio::test]

@@ -1,6 +1,6 @@
 # mcp-chinese-dict-search — Windows x64 installation
 
-**Version:** 0.5.0
+**Version:** 0.6.0
 
 This bundle contains the MCP stdio server for a local Markdown dictionary. It does **not** contain
 dictionary data. You supply your own `.zip` archive (or the extracted Markdown directory) in the
@@ -147,8 +147,12 @@ instead of `mcp.servers`.
           - 'C:/path/to/mcp-dict-pages'
 ```
 
-The tools register as `mcp__chinese-medicine-dictionary__search_dictionary` and
-`mcp__chinese-medicine-dictionary__get_entry`. `dsh --profile <profile> --dump-config` shows whether
+The tools register as `mcp__chinese-medicine-dictionary__search_dictionary`,
+`mcp__chinese-medicine-dictionary__get_entry`, and
+`mcp__chinese-medicine-dictionary__related_entries`,
+`mcp__chinese-medicine-dictionary__render_graph`,
+`mcp__chinese-medicine-dictionary__related_network`, and
+`mcp__chinese-medicine-dictionary__render_network`. `dsh --profile <profile> --dump-config` shows whether
 the entry was composed. DSH 0.2.x ships the client; do not install
 `@deepseek-ai/dsh-mcp-client` separately. It supports tools and resources, but not MCP prompt
 templates.
@@ -185,6 +189,10 @@ If your client supports environment-based configuration, this is equivalent:
 |---|---|
 | `search_dictionary` | `query` (required), `scope` (`all`, `dictionary`, `meridian`, `medicinal`, `formulas`, `weights`), `limit` (1–20). |
 | `get_entry` | `term` (required), `source` (same values), `max_chars` (default 20,000). |
+| `related_entries` | `term` (required), `direction` (`outgoing`, `incoming`, `both`), `depth` (1–3), `limit` (1–50). |
+| `render_graph` | Same arguments as `related_entries`; returns a PNG image block plus an absolute file path. |
+| `related_network` | `term` (required), `domain` (`formula`, `medicinal`, `point_combination`), `direction`, `depth` (1–3), `limit` (1–50). |
+| `render_network` | Same arguments as `related_network`; returns a PNG image block plus an absolute file path. |
 
 Examples to try in a client:
 
@@ -194,9 +202,13 @@ Examples to try in a client:
 - `search_dictionary({"query":"ma huang","scope":"medicinal"})`
 - `search_dictionary({"query":"麻黄","scope":"medicinal"})`
 - `get_entry({"term":"qi2"})`
+- `related_entries({"term":"qi","direction":"both","depth":1})`
+- `render_graph({"term":"spleen","direction":"outgoing","depth":2,"limit":20})`
+- `related_network({"term":"Four Gentlemen Decoction","domain":"medicinal","depth":1})`
+- `render_network({"term":"Four Gentlemen Decoction","domain":"formula","depth":1})`
 - `search_dictionary({"query":"liang","scope":"weights"})`
 
-When a query matches no index key and the ranked hits are weak, both tools return near misses:
+When a query matches no index key and the ranked hits are weak, the lookup tools return near misses:
 English headword typos (`abdomnal` → `abdominal fullness`) and pinyin typos
 (`ma huag` → `ma huang (ephedra)`). Each suggestion carries the absolute path of a page written for
 it when `--pages-dir` is configured. With a directory source, `get_entry` also names the exact
@@ -227,6 +239,46 @@ To build the indices and write the cache without starting a client, run:
 It prints the key counts and the cache path to stderr and exits; exit code `1` means the cache
 could not be written. An ordinary startup after that is a cache hit.
 
+## Optional semantic index (Ollama)
+
+The Windows bundle is built from the default feature set and is lexical-only. To enable gated
+hybrid retrieval, build locally with the optional feature and install a local embedding model:
+
+```powershell
+cargo build --release --features semantic
+# embeddinggemma:latest is the CPU-friendly choice (2K context, 768 dimensions).
+# qwen3-embedding:0.6b gives stronger non-exact Chinese separation but indexes much
+# more slowly on CPU.
+ollama pull embeddinggemma:latest
+
+# Inspect the model, digest, dimensions, and index status. This never writes.
+.\mcp-chinese-dict-search.exe --data "C:\path\to\mcp-dict-data" `
+  --embedding-model embeddinggemma:latest --check-semantic
+
+# Build the index. The path is digest-keyed; an older index is retained.
+.\mcp-chinese-dict-search.exe --data "C:\path\to\mcp-dict-data" `
+  --embedding-model embeddinggemma:latest --build-semantic-index
+```
+
+Then add `--embedding-model embeddinggemma:latest` to the client arguments and restart the server.
+Only loopback Ollama is accepted (`127.0.0.1`, `localhost`, `::1`); Ollama Cloud and remote hosts
+are rejected. The default behavior if Ollama or the index is unavailable is lexical fallback with
+a warning; add `--require-semantic` to fail startup instead. On a local 30-query English/mixed
+set, hybrid recall@5 was 0.567 versus 0.233 lexical and MRR 0.455 versus 0.183, with 75 ms added
+p95; the exact/pinyin/Chinese regression set was unchanged. The index is about 21 MB and the model
+about 621 MB. These are local measurements, not a general quality claim.
+
+The index is tied to the model name **and digest**. After `ollama pull` changes a tag:
+
+1. Run `--check-semantic` and note the new digest.
+2. Rebuild with `--build-semantic-index`; the old index remains usable for rollback.
+3. Evaluate, switch the client configuration, and restart.
+4. Remove only stale indexes with `--prune-semantic-index --yes`.
+
+Never copy vectors between models; embeddings from different digests are not comparable. Keep the
+last known-good model in the Ollama store and its index on disk until a replacement is accepted.
+Do not copy the index or model weights into this repository or `dist/`.
+
 ## Data path
 
 `--data` (or `MCP_CHINESE_DICT_DATA`) is required; the server does not guess a filename. Use an
@@ -241,6 +293,7 @@ directory. The citation title comes from `--title`, the archive file name, or th
 | Exit code 2, “Cannot read … as a zip archive” | The file is corrupt or not the expected archive; use the extracted `.md` directory instead. |
 | Tools missing in the client | Check the client's MCP log; a malformed JSON entry or a stale executable path is the usual cause. |
 | Wrong or empty results | Run with `--verbose --log-file server.log` and inspect the load report (counts, unresolved links, warnings). |
+| Semantic search silently falls back to lexical | Run `--check-semantic`; confirm Ollama is on loopback, the model is pulled, and the index digest matches. |
 | Ctrl+click on `10-c.md#a1RMS` opens Quick Open | That name is relative and exists only inside the data folder. Click the absolute `Source:` line, the `Entry page:` path, or a suggestion's page path instead. |
 | Markdown headings vanish as LaTeX in a preview | The linked-copy build unescapes `\[`/`\]`; rebuild it and reopen the file. |
 | Client hides stderr | Use `--log-file`; MCP clients usually discard a child process's stderr. |

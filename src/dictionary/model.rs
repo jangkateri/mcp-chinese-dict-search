@@ -187,6 +187,12 @@ pub struct LoadReport {
     pub lookup_cache_path: Option<String>,
     pub resolved_links: usize,
     pub unresolved_links: usize,
+    pub graph_nodes: usize,
+    pub graph_edges: usize,
+    pub graph_unmapped_links: usize,
+    pub network_formula_edges: usize,
+    pub network_formula_medicinal_edges: usize,
+    pub network_point_combinations: usize,
     pub anchorless_entries: usize,
     pub alias_parse_failures: usize,
     pub appendix_header_failures: usize,
@@ -210,6 +216,8 @@ pub enum MatchKind {
     Alias,
     Body,
     Id,
+    // A gated hybrid-retrieval fallback, never a lexical match.
+    Semantic,
 }
 
 /// One ranked search result.
@@ -264,6 +272,268 @@ pub struct EntryRequest {
     pub term: String,
     pub source: Scope,
     pub max_chars: usize,
+}
+
+/// Which links a graph traversal follows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+#[schemars(rename_all = "lowercase")]
+pub enum GraphDirection {
+    Outgoing,
+    Incoming,
+    Both,
+}
+
+impl GraphDirection {
+    pub fn parse(value: &str) -> Option<Self> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "outgoing" => Some(Self::Outgoing),
+            "incoming" => Some(Self::Incoming),
+            "both" => Some(Self::Both),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Outgoing => "outgoing",
+            Self::Incoming => "incoming",
+            Self::Both => "both",
+        }
+    }
+}
+
+/// The direction of one discovered graph edge.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+#[schemars(rename_all = "lowercase")]
+pub enum EdgeDirection {
+    Outgoing,
+    Incoming,
+}
+
+impl EdgeDirection {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Outgoing => "outgoing",
+            Self::Incoming => "incoming",
+        }
+    }
+}
+
+/// A graph traversal request from the tool layer.
+#[derive(Debug, Clone)]
+pub struct GraphRequest {
+    pub term: String,
+    pub direction: GraphDirection,
+    pub depth: usize,
+    pub limit: usize,
+}
+
+/// One reachable entry in a graph traversal.
+#[derive(Debug, Clone, Serialize, JsonSchema)]
+pub struct GraphNode {
+    pub source: Source,
+    pub term: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub anchor: Option<String>,
+    pub file: String,
+    pub citation: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_file: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub line: Option<usize>,
+    pub distance: usize,
+    pub edge_direction: EdgeDirection,
+    pub via: String,
+    pub link_text: String,
+    pub redirect: bool,
+}
+
+/// The result of one graph traversal.
+#[derive(Debug, Clone, Serialize, JsonSchema)]
+pub struct GraphResponse {
+    pub query: String,
+    pub term: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub anchor: Option<String>,
+    pub direction: GraphDirection,
+    pub depth: usize,
+    pub nodes: Vec<GraphNode>,
+    pub total: usize,
+    pub truncated: bool,
+}
+
+/// A rendered graph image plus the graph it depicts.
+#[derive(Debug, Clone, Serialize, JsonSchema)]
+pub struct GraphImageResponse {
+    pub graph: GraphResponse,
+    pub image_path: String,
+    pub mime_type: String,
+    pub width: u32,
+    pub height: u32,
+}
+
+/// Which appendix network to query.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[schemars(rename_all = "snake_case")]
+pub enum NetworkDomain {
+    Formula,
+    Medicinal,
+    PointCombination,
+}
+
+impl NetworkDomain {
+    pub fn parse(value: &str) -> Option<Self> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "formula" => Some(Self::Formula),
+            "medicinal" => Some(Self::Medicinal),
+            "point_combination" => Some(Self::PointCombination),
+            _ => None,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Formula => "formula",
+            Self::Medicinal => "medicinal",
+            Self::PointCombination => "point_combination",
+        }
+    }
+}
+
+/// The kind of node in the appendix network.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[schemars(rename_all = "snake_case")]
+pub enum NetworkNodeType {
+    Formula,
+    Medicinal,
+    Point,
+    Combination,
+    Method,
+}
+
+impl NetworkNodeType {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Formula => "formula",
+            Self::Medicinal => "medicinal",
+            Self::Point => "point",
+            Self::Combination => "combination",
+            Self::Method => "method",
+        }
+    }
+}
+
+/// How one appendix node relates to another.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[schemars(rename_all = "snake_case")]
+pub enum NetworkRelation {
+    DerivedFrom,
+    HasDerivative,
+    CombinedWith,
+    VariantOf,
+    HasVariant,
+    Contains,
+    UsedIn,
+    UsesPoint,
+    UsedInCombination,
+    HasCombination,
+    Method,
+}
+
+impl NetworkRelation {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::DerivedFrom => "derived_from",
+            Self::HasDerivative => "has_derivative",
+            Self::CombinedWith => "combined_with",
+            Self::VariantOf => "variant_of",
+            Self::HasVariant => "has_variant",
+            Self::Contains => "contains",
+            Self::UsedIn => "used_in",
+            Self::UsesPoint => "uses_point",
+            Self::UsedInCombination => "used_in_combination",
+            Self::HasCombination => "has_combination",
+            Self::Method => "method",
+        }
+    }
+
+    pub fn inverse(self) -> Self {
+        match self {
+            Self::DerivedFrom => Self::HasDerivative,
+            Self::HasDerivative => Self::DerivedFrom,
+            Self::CombinedWith => Self::CombinedWith,
+            Self::VariantOf => Self::HasVariant,
+            Self::HasVariant => Self::VariantOf,
+            Self::Contains => Self::UsedIn,
+            Self::UsedIn => Self::Contains,
+            Self::UsesPoint => Self::UsedInCombination,
+            Self::UsedInCombination => Self::UsesPoint,
+            Self::HasCombination => Self::Method,
+            Self::Method => Self::HasCombination,
+        }
+    }
+}
+
+/// A request for one appendix network traversal.
+#[derive(Debug, Clone)]
+pub struct NetworkRequest {
+    pub term: String,
+    pub domain: NetworkDomain,
+    pub direction: GraphDirection,
+    pub depth: usize,
+    pub limit: usize,
+}
+
+/// One node returned by an appendix network traversal.
+#[derive(Debug, Clone, Serialize, JsonSchema)]
+pub struct NetworkNode {
+    pub node_type: NetworkNodeType,
+    pub source: Source,
+    pub term: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    pub citation: String,
+    pub file: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_file: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub line: Option<usize>,
+    pub distance: usize,
+    pub edge_direction: EdgeDirection,
+    pub via: String,
+    pub relation: NetworkRelation,
+    pub label: String,
+}
+
+/// The result of one appendix network traversal.
+#[derive(Debug, Clone, Serialize, JsonSchema)]
+pub struct NetworkResponse {
+    pub query: String,
+    pub term: String,
+    pub node_type: NetworkNodeType,
+    pub domain: NetworkDomain,
+    pub direction: GraphDirection,
+    pub depth: usize,
+    pub nodes: Vec<NetworkNode>,
+    pub total: usize,
+    pub truncated: bool,
+}
+
+/// A rendered appendix-network image plus the network it depicts.
+#[derive(Debug, Clone, Serialize, JsonSchema)]
+pub struct NetworkImageResponse {
+    pub network: NetworkResponse,
+    pub image_path: String,
+    pub mime_type: String,
+    pub width: u32,
+    pub height: u32,
 }
 
 /// Flattened alias display for one entry.

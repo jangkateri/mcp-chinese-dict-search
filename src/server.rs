@@ -22,7 +22,11 @@ use crate::protocol::{
     result_response,
 };
 use crate::resources::{ABOUT_URI, ENTRY_URI_PREFIX, ResourceReadError};
-use crate::tools::{CallToolError, call_tool, error_message, error_tool_result, tool_definitions};
+#[cfg(not(feature = "semantic"))]
+use crate::tools::call_tool;
+#[cfg(feature = "semantic")]
+use crate::tools::call_tool_with_semantic;
+use crate::tools::{CallToolError, error_message, error_tool_result, tool_definitions};
 
 pub use crate::protocol::error_code as ErrorCode;
 
@@ -40,8 +44,12 @@ pub fn server_instructions(title: &str) -> String {
      Use search_dictionary for English terms; pinyin in tone-numbered (jia3), tone-marked (jiǎ), or toneless (jia) \
      form; simplified or traditional Chinese characters; acupuncture-point identifiers; herbs; formulas; or \
      measurements. Use get_entry when the exact term or identifier is known, including a citation anchor such as \
-     a1ALP. When the user writes \"tcm citation <anchor>\", call get_entry with that anchor to return the entry \
-     text and its full source record. Any entry is also available as the resource \
+     a1ALP. Use related_entries to follow resolved cross-references from a main dictionary entry: outgoing for \
+     entries it references, incoming for entries that reference it, and both for either, up to three hops. Use \
+     render_graph when the user wants to see that neighborhood as a PNG; it returns an image block and an \
+     absolute file path. Use related_network with domain formula, medicinal, or point_combination for \
+     appendix relationships, and render_network for their PNG. When the user writes \"tcm citation <anchor>\", \
+     call get_entry with that anchor to return the entry text and its full source record. Any entry is also available as the resource \
      dictionary://entry/<anchor>, and the citation prompt returns one entry per reference. Whenever you present a \
      citation anchor, resolve it with get_entry and include the entry text; never leave a bare anchor. Cite the \
      returned file and anchor. Do not read the dictionary directory with the client's own file, shell, grep, or \
@@ -56,6 +64,8 @@ pub fn server_instructions(title: &str) -> String {
 /// One MCP server instance bound to a loaded dictionary.
 pub struct McpServer {
     dictionary: Arc<Dictionary>,
+    #[cfg(feature = "semantic")]
+    semantic: Option<Arc<crate::semantic::SemanticEngine>>,
     logger: Logger,
     pages: Option<Pages>,
     protocol_version: Mutex<Option<String>>,
@@ -78,6 +88,8 @@ impl McpServer {
     ) -> Self {
         Self {
             dictionary,
+            #[cfg(feature = "semantic")]
+            semantic: None,
             logger,
             pages: None,
             protocol_version: Mutex::new(None),
@@ -91,6 +103,12 @@ impl McpServer {
     /// can be opened with one click.
     pub fn with_pages(mut self, pages: Pages) -> Self {
         self.pages = Some(pages);
+        self
+    }
+
+    #[cfg(feature = "semantic")]
+    pub fn with_semantic(mut self, semantic: Option<Arc<crate::semantic::SemanticEngine>>) -> Self {
+        self.semantic = semantic;
         self
     }
 
@@ -309,6 +327,17 @@ impl McpServer {
             .insert(id.clone(), cancel.clone());
 
         let started = std::time::Instant::now();
+        #[cfg(feature = "semantic")]
+        let outcome = call_tool_with_semantic(
+            &self.dictionary,
+            self.semantic.clone(),
+            name,
+            &arguments,
+            cancel,
+            self.pages.as_ref(),
+        )
+        .await;
+        #[cfg(not(feature = "semantic"))]
         let outcome = call_tool(
             &self.dictionary,
             name,
@@ -508,7 +537,7 @@ mod tests {
             json!({"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}),
         )
         .await;
-        assert_eq!(list["result"]["tools"].as_array().unwrap().len(), 2);
+        assert_eq!(list["result"]["tools"].as_array().unwrap().len(), 6);
     }
 
     #[tokio::test]

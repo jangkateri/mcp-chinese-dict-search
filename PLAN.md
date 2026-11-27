@@ -2,9 +2,9 @@
 
 | Field | Value |
 |---|---|
-| Status | Working tree 0.5.0; dictionary-agnostic title, required `--data`, generic text; v0.4.1 is the last release |
-| Version | 0.5.0 |
-| Last updated | 2026-11-25 |
+| Status | Working tree 0.6.0: graph traversal, graph PNGs, appendix networks, and optional gated semantic retrieval; dictionary-agnostic title, required `--data`, generic text; v0.5.0 is the last release |
+| Version | 0.6.0 |
+| Last updated | 2026-11-27 |
 | Source specification | `PROJECT-SETUP-PROMPT.md` |
 | Tracking document | [`CHECKLIST.md`](CHECKLIST.md) |
 | Working rules | [`CLAUDE.md`](CLAUDE.md) |
@@ -25,7 +25,11 @@ The server must let a model:
    pinyin, and cross-references;
 2. retrieve an exact entry on request, without paging through 7 MB of Markdown;
 3. receive appendix material when the query belongs to one of the four appendix domains:
-   acupuncture meridians/points, medicinal agents, herbal formulas, and weights/measures.
+   acupuncture meridians/points, medicinal agents, herbal formulas, and weights/measures;
+4. follow the dictionary's resolved cross-references from one entry, in either direction and up to
+   three hops;
+5. render that neighborhood as a PNG with an absolute file path;
+6. traverse formula families, formula-medicinal composition, and named point combinations.
 
 ## 2. Scope
 
@@ -40,16 +44,21 @@ The server must let a model:
 - Generate pinyin- and Han-keyed lookup indices at load time for tone-numbered, tone-marked,
   toneless, simplified, and traditional forms (Phase 7A; see §15).
 - Resolve the book's internal `<a href="…">` links into retrievable term references.
-- Two model-facing tools: `search_dictionary` and `get_entry`.
+- Build outgoing and incoming graph adjacency from those resolved links.
+- Six model-facing tools: `search_dictionary`, `get_entry`, `related_entries`, `render_graph`,
+  `related_network`, and `render_network`.
 - Deterministic, tested parsers and a hermetic integration suite.
 - Documentation, build instructions, and a Windows deployment bundle.
 
 ### Out of scope (v1)
 
-- RAG, embeddings, vector databases, or a small language model.
+- RAG, generated answers, or a language model at query time. The optional `semantic` feature adds
+  retrieval, not generation, over a local embedding model; it is off in the default build and
+  tracked in [`ENHANCEMENT-PLAN.md`](ENHANCEMENT-PLAN.md).
 - Serving images over HTTP. The archive's 10 image references are all in front matter or the
   index, not inside dictionary entries; the server keeps references as text.
-- Network access of any kind. This server reads local files only.
+- Network access in the default build. The optional semantic feature may call only a loopback
+  Ollama server; remote hosts and Ollama Cloud are rejected.
 - Editing or authoring dictionary content.
 - Additional books.
 
@@ -529,6 +538,52 @@ measurement is augmented with that appendix; a query that does not is not.
   instruction maps `tcm citation <anchor>` to `get_entry` with that anchor, so a citation tag is
   actionable without a separate tool.
 
+### 7.6 Graph traversal
+
+`related_entries` follows only links the parser resolved. The graph has one node per main
+dictionary entry and directed edges for each resolved `Entry.links` entry whose target anchor maps
+to an entry.
+
+- `direction`: `outgoing` follows links the entry makes; `incoming` follows links into it; `both`
+  follows either. Outgoing edges are considered first; duplicate neighbours collapse.
+- `depth`: 1–3. Breadth-first traversal seeds the start entry as visited, so cycles terminate and
+  each reachable entry appears once at its shortest distance.
+- `limit`: 1–50 returned nodes; an internal 10,000-node visit cap prevents a pathological hub from
+  exhausting memory.
+- Every node records `distance`, `edge_direction`, `via` (the entry whose link reached it),
+  `link_text`, canonical citation, absolute source path and line when available, and `redirect`.
+- Nodes are ordered by `(distance, entry index)`. `total` is the unique discovered count before
+  `limit`; `truncated` is true when `limit` or the visit cap cut the output.
+- The start term uses the same resolution precedence as `get_entry`'s dictionary path. Appendix
+  terms are not graph nodes; the tool returns a clear not-found message pointing to `get_entry`.
+- Unresolved links and links whose target cannot be mapped are excluded and counted in the load
+  report (`graph_unmapped_links`), never invented.
+
+### 7.7 Appendix network
+
+`related_network` adds three domains built at startup:
+
+- **formula**: explicit prose such as “This is X with the addition of…”, “combined with…”, and
+  “variant of…”. Edges carry `has_derivative`, `combined_with`, or `has_variant`.
+- **medicinal**: formula ingredient lines (`□`) matched to appendix-2 medicinals. Edges carry
+  `contains` / `used_in`. Stated alternatives in one ingredient line can create multiple edges.
+- **point_combination**: named `combining … points` main entries parsed into combination records;
+  role-marked point IDs (`S.`, `N.`, `T.`, `A.`, `L.`, `D.`) become combination→point edges, and
+  each combination cites the method entry and its indication text.
+
+`render_network` maps the network nodes to the same PNG renderer. These edges are explicit source
+relationships, not inferred clinical equivalence.
+
+### 7.8 Graph PNG rendering
+
+`render_graph` uses the same term/direction/depth/limit arguments as `related_entries` and writes a
+PNG to `--pages-dir` when configured, otherwise to the system temporary directory. The image uses
+one column per hop, a gold start box, labelled node boxes, green outgoing edges, and blue incoming
+edges. The 8x8 bitmap font keeps the build asset-free; labels are truncated to their box width.
+The tool returns an MCP `image` content block plus an absolute `Image: <path>` line, and structured
+metadata (path, MIME type, dimensions, graph) so a client that cannot display images can still open
+the file.
+
 ## 8. MCP interface
 
 ### 8.1 Protocol
@@ -637,11 +692,90 @@ If the term is not found, return an MCP `isError: true` tool result listing up t
 matches, so the model can correct the spelling. A valid query with no match is an execution
 outcome, not a protocol violation; JSON-RPC `Invalid Params` is reserved for malformed arguments.
 
+### 8.3.1 `related_entries`
+
+| Argument | Type | Default | Notes |
+|---|---|---|---|
+| `term` | string, required | — | Main dictionary headword, alias, pinyin, Chinese, or citation anchor. |
+| `direction` | string enum, optional | `both` | `outgoing`, `incoming`, `both`. |
+| `depth` | integer, optional | 1 | 1–3. |
+| `limit` | integer, optional | 20 | 1–50. |
+
+Structured output:
+
+```json
+{
+  "query": "qi",
+  "term": "qi4",
+  "anchor": null,
+  "direction": "both",
+  "depth": 1,
+  "nodes": [
+    {
+      "source": "dictionary",
+      "term": "channel qi4",
+      "anchor": "a1PDH",
+      "file": "23-p.md",
+      "citation": "Dictionary, 23-p.md#a1PDH",
+      "source_file": "C:\\data\\23-p.md",
+      "line": 123,
+      "distance": 1,
+      "edge_direction": "outgoing",
+      "via": "qi4",
+      "link_text": "channel qi4",
+      "redirect": false
+    }
+  ],
+  "total": 1,
+  "truncated": false
+}
+```
+
+Absent optional fields are omitted. Text rendering includes the canonical citation, the absolute
+`Source: <path>:<line>` line when available, the edge direction, `via`, and the visible link text.
+Appendix-only terms return `DICTIONARY_NOT_FOUND`; invalid direction/depth/limit are JSON-RPC
+`-32602` errors.
+
+### 8.3.2 `render_graph`
+
+Same arguments as `related_entries`. The result has a text block containing `Image: <absolute
+path>`, an MCP `image` block with PNG data, and `structuredContent`:
+
+```json
+{
+  "graph": { "query": "spleen", "term": "spleen", "direction": "outgoing", "depth": 2,
+             "nodes": [], "total": 81, "truncated": true },
+  "image_path": "C:\\ProgramData\\mcp-dict-pages\\graph-9a3e425d4c7c00d2.png",
+  "mime_type": "image/png",
+  "width": 1000,
+  "height": 1130
+}
+```
+
+The file is written to `--pages-dir` when configured, otherwise the system temporary directory.
+The image is a diagnostic view: one column per hop, gold start node, green outgoing edges, blue
+incoming edges, and truncated labels. It does not replace `get_entry` for entry text.
+
+### 8.3.3 `related_network`
+
+Required `term` and `domain` (`formula`, `medicinal`, `point_combination`), plus optional
+`direction`, `depth` (1–3), and `limit` (1–50). Output is a `NetworkResponse` whose nodes carry
+`node_type`, `relation`, `label`, distance, edge direction, via, citation, and absolute source
+line. The formula domain follows formula-family edges; medicinal follows formula↔medicinal edges;
+point_combination follows method→combination→point and point→combination edges.
+
+### 8.3.4 `render_network`
+
+Same arguments as `related_network`; returns a PNG image block, an absolute path, and a
+`NetworkImageResponse` with the network, image path, MIME type, width, and height.
+
 ### 8.4 Server instructions
 
 Published in `initialize` and kept short: the server searches the dictionary and its four
 appendices locally; prefer `get_entry` for exact definitions; prefer `search_dictionary` when the
-exact headword is unknown; cite the returned file/anchor. It also names the entry resource
+exact headword is unknown; use `related_entries` to follow resolved cross-references; use
+`render_graph` for a PNG view; use `related_network`/`render_network` for formula, medicinal, and
+point-combination relationships; cite the returned file/anchor. It also names the entry resource
 (`dictionary://entry/<anchor>`) and the `citation` prompt.
 
 ### 8.5 Resources and the citation prompt
@@ -836,15 +970,24 @@ Exit codes: `0` normal, `1` transport failure or a lookup cache that could not b
 - Ranking: exact > prefix > contains > body; token coverage; tie-breaking.
 - Snippet windowing and truncation.
 - `get_entry` redirect following and cycle detection.
+- Graph build: resolved vs unresolved links, outgoing/incoming adjacency, unmapped targets.
+- Graph traversal: directions, depth 2, cycles, duplicate neighbours, limit truncation, anchorless
+  start, appendix-only error.
+- Graph image: PNG signature/dimensions, empty graph, image content block, absolute path, and
+  structured image metadata.
+- Appendix network: formula derivation prose, ingredient-line matching, point-combination grouping,
+  point-ID boundary handling, inverse relations, and real-data manual checks.
 
 ### Integration tests (`tests/`)
 
 - `stdio_contract.rs`: real binary, initialize/ping/tools/list/server-discover/ping, stdout purity,
   help/version streams, configuration error exit code.
 - `tools_e2e.rs`: an invented corpus, written to a temporary directory at test time by
-  `tests/support/fixture.rs`, exercises both tools over stdio, scope filtering, appendix routing,
-  argument errors, and not-found near matches. No dictionary data is stored in the repository.
-- `real_archive.rs`: when the archive is present, assert:
+  `tests/support/fixture.rs`, exercises every tool over stdio, scope filtering, appendix routing,
+  graph traversal, argument errors, and not-found near matches. No dictionary data is stored in the
+  repository.
+- `real_data.rs`: when the archive is present, assert graph node/edge/unmapped invariants and a
+  traversal from the first dictionary hit, in addition to:
   - 5,803 main entries, 403 point entries, 572 medicinals, 261 formulas;
   - `abdominal fullness` returns its definition;
   - `ST-36` returns `Leg Three Li` (足三里);
@@ -888,8 +1031,9 @@ fixed location other than the documented discovery rules.
 2. The release binary loads the supplied archive in under 2 seconds (measured: 0.44 s with a warm
    lookup cache and 0.50 s on the first run; 393 ms after Phase 6.1; 405 ms for v0.1.0; debug build
    2.6–3.1 s) and reports the expected counts.
-3. `search_dictionary` and `get_entry` work over a real stdio session with Claude Code,
-   OpenCode, or a scripted client.
+3. `search_dictionary`, `get_entry`, `related_entries`, `render_graph`, `related_network`, and
+   `render_network` work over a real stdio session with Claude Code, OpenCode, or a scripted
+   client.
 4. A query for an acupoint, herb, formula, or measurement returns both the dictionary material
    (when one exists) and the relevant appendix material.
 5. Every result carries a file/anchor citation.
@@ -935,8 +1079,18 @@ Phase 7A implements the pinyin- and Chinese-keyed lookup described in the specif
 - Tests cover `qi`/`qi4`/`qì`/`qi2`/`qí`, `气`/`氣`, `麻黄`/`麻黃`, `qīng rè`/`qing1 re4`,
   `zu3 san1 li3`, `下陵`, and cache reuse/invalidation.
 
-The remaining deferred enhancement is additional Chinese-medicine books and a research/search mode
-(RAG or a small language model).
+Graph traversal is implemented over the existing resolved links. Gated local-Ollama semantic
+retrieval is implemented behind the optional `semantic` feature and tracked in
+[`ENHANCEMENT-PLAN.md`](ENHANCEMENT-PLAN.md); the default build remains lexical-only. The feature
+builds a digest-keyed flat cosine index from the same entries and appendices, consults the model
+only when the best lexical score is below 300, skips pure pinyin, and merges results with
+reciprocal-rank fusion. Missing Ollama, a missing model, a stale index, or an embedding failure
+degrades to the normal lexical response unless `--require-semantic` is set. On a local 30-query
+English/mixed set with `embeddinggemma:latest`, hybrid recall@5 rose from 0.233 to 0.567 and MRR
+from 0.183 to 0.455, with 75 ms added p95, 20.66 MB additional MCP working set, and a 20.66 MiB
+index; the exact/pinyin/Chinese regression set kept top-1 at 1.0. The feature was accepted with
+documented limits in [`ENHANCEMENT-CHECKLIST.md`](ENHANCEMENT-CHECKLIST.md) (S4.7–S4.8).
+Additional Chinese-medicine books and a research mode remain deferred.
 
 ## 16. Decisions and open questions
 
@@ -945,7 +1099,7 @@ Recommended defaults are marked; change them before Phase 2 if desired.
 | # | Decision | Recommended default |
 |---|---|---|
 | 1 | Data source | Support **both** zip and extracted directory. |
-| 2 | Tool surface | Two tools: `search_dictionary`, `get_entry`. No browse/stat tool in v1. |
+| 2 | Tool surface | Six tools: `search_dictionary`, `get_entry`, `related_entries`, `render_graph`, `related_network`, `render_network`. No browse/stat tool in v1. |
 | 3 | Appendix augmentation | Query/headword/identifier driven, plus point IDs found in a body. Not every herb or formula mentioned in prose. |
 | 4 | Redirect entries | Follow one `See …` hop automatically and disclose it. |
 | 5 | Output defaults | 5 hits, 20,000 characters per entry. |
@@ -990,6 +1144,7 @@ mcp-chinese-dict-search/
 │   ├── server.rs               # dispatch, initialize, tools/call lifecycle
 │   ├── transport.rs            # newline framing, concurrent dispatch, stdout writes
 │   ├── tools.rs                # tool schemas, validation, text rendering
+│   ├── graph_image.rs          # PNG rendering of graph results
 │   └── dictionary/
 │       ├── mod.rs              # Dictionary, load entry point, re-exports
 │       ├── model.rs            # Entry, Alias, AppendixEntry, Section, Link
@@ -1000,12 +1155,14 @@ mcp-chinese-dict-search/
 │       ├── normalize.rs        # NFKD, escapes, case, whitespace
 │       ├── pinyin.rs           # tone-numbered, tone-marked, and toneless keys
 │       ├── lookup.rs           # generated pinyin and Han lookup indices
+│       ├── graph.rs            # resolved-link adjacency and bounded traversal
+│       ├── network.rs          # formula, medicinal, and point-combination networks
 │       └── search.rs           # ranking, snippets, scopes, get_entry
 └── tests/
     ├── support/mod.rs          # hermetic binary command + stdio session helper
     ├── support/fixture.rs      # invented corpus, written at test time
     ├── stdio_contract.rs
     ├── tools_e2e.rs
-    ├── real_archive.rs
+    ├── real_data.rs
     └── dist_bundle.rs
 ```

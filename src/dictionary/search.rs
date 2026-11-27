@@ -35,6 +35,19 @@ pub fn search(
     dictionary: &Dictionary,
     request: &SearchRequest,
 ) -> Result<SearchResponse, DictionaryError> {
+    let mut response = search_all(dictionary, request)?;
+    response.hits.truncate(request.limit);
+    Ok(response)
+}
+
+/// Rank every match without applying the response limit.
+///
+/// Hybrid fusion needs the full ranked list to merge semantic candidates;
+/// `search` is the truncated public surface.
+pub(crate) fn search_all(
+    dictionary: &Dictionary,
+    request: &SearchRequest,
+) -> Result<SearchResponse, DictionaryError> {
     let query = request.query.trim();
     let normalized = normalize(query);
     if normalized.is_empty() {
@@ -82,13 +95,12 @@ pub fn search(
     if let Some(exact) = &exact
         && exact.shortcut
     {
-        let mut hits: Vec<SearchHit> = exact
+        let hits: Vec<SearchHit> = exact
             .targets
             .iter()
             .filter_map(|(target, score)| lookup_hit(dictionary, *target, *score, &normalized))
             .collect();
         let total = hits.len();
-        hits.truncate(request.limit);
         return Ok(SearchResponse {
             query: query.to_owned(),
             scope: request.scope,
@@ -243,7 +255,6 @@ pub fn search(
     }
 
     let total = hits.len();
-    hits.truncate(request.limit);
 
     let suggestions = if weak_results {
         let mut values = fuzzy::term_suggestions(dictionary, &normalized, request.scope, 3);
@@ -285,23 +296,10 @@ pub fn entry(
         ));
     }
 
-    if request.source.allows(Source::Dictionary) {
-        if let Some(index) = find_entry_by_anchor(dictionary, term) {
-            return Ok(dictionary_response(dictionary, index, request));
-        }
-        if let Some(index) = dictionary
-            .by_headword
-            .get(&normalized)
-            .and_then(|indices| indices.first())
-        {
-            return Ok(dictionary_response(dictionary, *index, request));
-        }
-        if let Some(index) = find_entry_by_lookup(dictionary, term) {
-            return Ok(dictionary_response(dictionary, index, request));
-        }
-        if let Some(index) = find_entry(dictionary, &normalized) {
-            return Ok(dictionary_response(dictionary, index, request));
-        }
+    if request.source.allows(Source::Dictionary)
+        && let Some(index) = resolve_dictionary_entry(dictionary, term)
+    {
+        return Ok(dictionary_response(dictionary, index, request));
     }
 
     if let Some(reference) = find_appendix_ref_by_lookup(dictionary, term, request.source)
@@ -323,6 +321,32 @@ pub fn entry(
     );
     error.suggestion_terms = suggestions.into_iter().map(|value| value.term).collect();
     Err(error)
+}
+
+/// Resolve a main-dictionary entry using the same precedence as `get_entry`.
+///
+/// Anchor → exact normalized headword → generated lookup index → exact alias →
+/// prefix → substring. Graph traversal uses this so it cannot drift from
+/// `get_entry`.
+pub(crate) fn resolve_dictionary_entry(dictionary: &Dictionary, term: &str) -> Option<usize> {
+    let normalized = normalize(term);
+    if normalized.is_empty() {
+        return None;
+    }
+    if let Some(index) = find_entry_by_anchor(dictionary, term) {
+        return Some(index);
+    }
+    if let Some(index) = dictionary
+        .by_headword
+        .get(&normalized)
+        .and_then(|indices| indices.first())
+    {
+        return Some(*index);
+    }
+    if let Some(index) = find_entry_by_lookup(dictionary, term) {
+        return Some(index);
+    }
+    find_entry(dictionary, &normalized)
 }
 
 /// Resolve a citation anchor such as `a1ALP` to its exact entry.
@@ -697,7 +721,7 @@ fn dictionary_response(
         cross_references: entry.links.clone(),
         related: related_points(dictionary, &entry.body, CROSS_REFERENCE_LIMIT),
         redirected_from,
-        citation: citation(dictionary, entry),
+        citation: entry_citation(dictionary, entry),
         source_file: dictionary.source_file(&entry.file),
         line: Some(entry.line),
         truncated,
@@ -1061,7 +1085,7 @@ fn is_measurement_query(query: &str, tokens: &[String]) -> bool {
             .any(|unit| query.contains(unit))
 }
 
-fn first_paragraphs(body: &str, max: usize) -> String {
+pub(crate) fn first_paragraphs(body: &str, max: usize) -> String {
     let mut paragraphs = Vec::new();
     for paragraph in body.split("\n\n") {
         let paragraph = collapse_whitespace(&plain_text(paragraph));
@@ -1117,11 +1141,11 @@ fn truncate_chars(text: &str, max: usize) -> String {
     text.chars().take(max).collect()
 }
 
-fn is_redirect(body: &str) -> bool {
+pub(crate) fn is_redirect(body: &str) -> bool {
     body.trim_start().to_ascii_lowercase().starts_with("see ")
 }
 
-fn citation(dictionary: &Dictionary, entry: &Entry) -> String {
+pub(crate) fn entry_citation(dictionary: &Dictionary, entry: &Entry) -> String {
     let mut citation = format!("{}, {}", dictionary.title(), entry.file);
     if let Some(anchor) = &entry.anchor {
         citation.push('#');

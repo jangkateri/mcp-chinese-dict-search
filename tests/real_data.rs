@@ -5,7 +5,9 @@
 
 mod support;
 
-use mcp_chinese_dict_search::dictionary::{Dictionary, EntryRequest, Scope, SearchRequest};
+use mcp_chinese_dict_search::dictionary::{
+    Dictionary, EntryRequest, GraphDirection, GraphRequest, Scope, SearchRequest,
+};
 
 #[test]
 fn a_configured_dictionary_loads_and_cites_its_own_title() {
@@ -31,17 +33,36 @@ fn a_configured_dictionary_loads_and_cites_its_own_title() {
         !dictionary.title().is_empty(),
         "the dictionary title is empty"
     );
+    assert_eq!(
+        report.graph_nodes, report.main_entries,
+        "every main entry must have a graph node"
+    );
+    assert_eq!(
+        report.graph_edges + report.graph_unmapped_links,
+        report.resolved_links,
+        "every resolved link is either a graph edge or explicitly unmapped"
+    );
 
     let search = dictionary
         .search(&SearchRequest {
             query: "a".to_owned(),
-            scope: Scope::All,
+            scope: Scope::Dictionary,
             limit: 1,
         })
         .expect("search succeeds");
     assert_eq!(search.query, "a");
 
     if let Some(term) = search.hits.first().map(|hit| hit.term.clone()) {
+        let related = dictionary
+            .related(&GraphRequest {
+                term: term.clone(),
+                direction: GraphDirection::Both,
+                depth: 1,
+                limit: 5,
+            })
+            .expect("graph traversal succeeds for the first dictionary hit");
+        assert!(!related.term.is_empty());
+        assert!(related.total <= report.main_entries);
         let entry = dictionary
             .entry(&EntryRequest {
                 term,

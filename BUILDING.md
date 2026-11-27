@@ -150,6 +150,20 @@ jobs:
           if-no-files-found: error
 ```
 
+## Optional semantic feature
+
+The default build links no HTTP client and is lexical-only. To build the gated Ollama fallback:
+
+```sh
+cargo build --release --features semantic
+cargo clippy --all-targets --features semantic -- -D warnings
+cargo test --all-targets --features semantic
+```
+
+The feature adds `ureq` and the `src/semantic/` modules. It still requires a local Ollama server
+and a separately built index at runtime; no model weights enter the binary or the repository. The
+default `cargo tree` must not contain `ureq`; check with `cargo tree | grep ureq`.
+
 ## Windows bundle
 
 `dist/` is a self-contained Windows x64 bundle. Refresh it after a release build:
@@ -172,7 +186,7 @@ Never copy the dictionary archive, extracted Markdown, images, an EPUB, or any c
 ## Linux/macOS bundle
 
 ```sh
-VERSION=0.5.0
+VERSION=0.6.0
 TARGET=x86_64-unknown-linux-musl
 PLATFORM=linux-x64
 BUNDLE="dist/$PLATFORM"

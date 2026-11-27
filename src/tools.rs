@@ -1,4 +1,4 @@
-//! Tool layer: the two MCP tools this server publishes, argument validation,
+//! Tool layer: the MCP tools this server publishes, argument validation,
 //! execution against the dictionary, and model-facing text rendering.
 //!
 //! Schemas deliberately stay inside the narrow JSON Schema subset that harnesses
@@ -7,23 +7,39 @@
 //! `title`, `default`, and `examples`. Bounds the subset cannot express are
 //! stated in prose and enforced here in code.
 
+use std::sync::Arc;
+
+use base64::Engine;
+use base64::engine::general_purpose::STANDARD;
 use serde_json::{Map, Value, json};
 use tokio_util::sync::CancellationToken;
 
+#[cfg(feature = "semantic")]
+use crate::semantic::SemanticEngine;
+
+use crate::dictionary::graph;
 use crate::dictionary::{
-    Dictionary, EntryRequest, EntryResponse, Link, MatchKind, Scope, SearchRequest, SearchResponse,
-    Suggestion,
+    Dictionary, EntryRequest, EntryResponse, GraphDirection, GraphImageResponse, GraphNode,
+    GraphRequest, GraphResponse, Link, MatchKind, NetworkDomain, NetworkImageResponse,
+    NetworkRequest, NetworkResponse, Scope, SearchRequest, SearchResponse, Suggestion,
 };
 use crate::error::{DictionaryError, DictionaryErrorCode, ToolArgumentError, UnknownToolError};
+use crate::graph_image;
 use crate::pages::Pages;
 
 pub const SEARCH_TOOL_NAME: &str = "search_dictionary";
 pub const ENTRY_TOOL_NAME: &str = "get_entry";
+pub const RELATED_TOOL_NAME: &str = "related_entries";
+pub const RENDER_TOOL_NAME: &str = "render_graph";
+pub const NETWORK_TOOL_NAME: &str = "related_network";
+pub const RENDER_NETWORK_TOOL_NAME: &str = "render_network";
 
 pub const DEFAULT_LIMIT: usize = 5;
 pub const MAX_LIMIT: usize = 20;
 pub const DEFAULT_MAX_CHARS: usize = 20_000;
 pub const MAX_MAX_CHARS: usize = 100_000;
+pub const DEFAULT_GRAPH_LIMIT: usize = 20;
+pub const DEFAULT_GRAPH_DEPTH: usize = 1;
 
 /// Failure while handling `tools/call`, before a tool result is built.
 #[derive(Debug, thiserror::Error)]
@@ -44,6 +60,67 @@ fn search_output_schema() -> Value {
 
 fn entry_output_schema() -> Value {
     crate::schema::output_schema::<EntryResponse>()
+}
+
+fn related_output_schema() -> Value {
+    crate::schema::output_schema::<GraphResponse>()
+}
+
+fn render_output_schema() -> Value {
+    crate::schema::output_schema::<GraphImageResponse>()
+}
+
+fn network_output_schema() -> Value {
+    crate::schema::output_schema::<NetworkResponse>()
+}
+
+fn render_network_output_schema() -> Value {
+    crate::schema::output_schema::<NetworkImageResponse>()
+}
+
+fn network_input_schema() -> Value {
+    json!({
+        "type": "object",
+        "properties": {
+            "term": {
+                "type": "string",
+                "description": "Formula, medicinal, acupuncture point, or named point-combination \
+                    entry to start from."
+            },
+            "domain": {
+                "type": "string",
+                "enum": ["formula", "medicinal", "point_combination"],
+                "description": "Which appendix network to query: formula-to-formula, \
+                    formula-to-medicinal, or point-to-combination."
+            },
+            "direction": {
+                "type": "string",
+                "enum": ["outgoing", "incoming", "both"],
+                "description": "Follow network edges in one direction or both. Defaults to both.",
+                "default": "both"
+            },
+            "depth": {
+                "type": "integer",
+                "description": format!(
+                    "How many network hops to follow, 1-{}. Defaults to {DEFAULT_GRAPH_DEPTH}; \
+                     a value outside the range is an error.",
+                    graph::MAX_DEPTH
+                ),
+                "default": DEFAULT_GRAPH_DEPTH
+            },
+            "limit": {
+                "type": "integer",
+                "description": format!(
+                    "How many network nodes to return, 1-{}. Defaults to {DEFAULT_GRAPH_LIMIT}; \
+                     a value outside the range is an error.",
+                    graph::MAX_LIMIT
+                ),
+                "default": DEFAULT_GRAPH_LIMIT
+            }
+        },
+        "required": ["term", "domain"],
+        "additionalProperties": false
+    })
 }
 
 /// The tool list advertised by `tools/list`.
@@ -126,6 +203,123 @@ pub fn tool_definitions() -> Value {
                 "additionalProperties": false
             },
             "outputSchema": entry_output_schema(),
+        },
+        {
+            "name": RELATED_TOOL_NAME,
+            "title": "Follow dictionary cross-references",
+            "description": "Follow the resolved cross-references of one main dictionary entry. Use \
+                outgoing for entries that this entry references, incoming for entries that reference \
+                it, and both for either. Returns up to three hops with the citation, direction, and \
+                link text that reached each entry. This tool covers main dictionary entries, not \
+                appendix entries.",
+            "annotations": { "readOnlyHint": true, "openWorldHint": false },
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "term": {
+                        "type": "string",
+                        "description": "Main dictionary headword, alias, pinyin, Chinese characters, \
+                            or citation anchor to start from."
+                    },
+                    "direction": {
+                        "type": "string",
+                        "enum": ["outgoing", "incoming", "both"],
+                        "description": "Follow links this entry makes, links into it, or both. \
+                            Defaults to both.",
+                        "default": "both"
+                    },
+                    "depth": {
+                        "type": "integer",
+                        "description": format!(
+                            "How many hops to follow, 1-{}. Defaults to {DEFAULT_GRAPH_DEPTH}; a \
+                             value outside the range is an error.",
+                            graph::MAX_DEPTH
+                        ),
+                        "default": DEFAULT_GRAPH_DEPTH
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": format!(
+                            "How many related entries to return, 1-{}. Defaults to \
+                             {DEFAULT_GRAPH_LIMIT}; a value outside the range is an error.",
+                            graph::MAX_LIMIT
+                        ),
+                        "default": DEFAULT_GRAPH_LIMIT
+                    }
+                },
+                "required": ["term"],
+                "additionalProperties": false
+            },
+            "outputSchema": related_output_schema(),
+        },
+        {
+            "name": RENDER_TOOL_NAME,
+            "title": "Render a graph neighborhood as a PNG",
+            "description": "Render the related-entry graph as a PNG image and return it with an \
+                absolute file path. Uses the same term, direction, depth, and limit as \
+                related_entries. The image shows the start entry, labelled nodes, and green \
+                outgoing / blue incoming edges. It is written to --pages-dir when configured, \
+                otherwise to the system temporary directory.",
+            "annotations": { "readOnlyHint": true, "openWorldHint": false },
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "term": {
+                        "type": "string",
+                        "description": "Main dictionary headword, alias, pinyin, Chinese characters, \
+                            or citation anchor to start from."
+                    },
+                    "direction": {
+                        "type": "string",
+                        "enum": ["outgoing", "incoming", "both"],
+                        "description": "Follow links this entry makes, links into it, or both. \
+                            Defaults to both.",
+                        "default": "both"
+                    },
+                    "depth": {
+                        "type": "integer",
+                        "description": format!(
+                            "How many hops to draw, 1-{}. Defaults to {DEFAULT_GRAPH_DEPTH}; a \
+                             value outside the range is an error.",
+                            graph::MAX_DEPTH
+                        ),
+                        "default": DEFAULT_GRAPH_DEPTH
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": format!(
+                            "How many related entries to draw, 1-{}. Defaults to \
+                             {DEFAULT_GRAPH_LIMIT}; a value outside the range is an error.",
+                            graph::MAX_LIMIT
+                        ),
+                        "default": DEFAULT_GRAPH_LIMIT
+                    }
+                },
+                "required": ["term"],
+                "additionalProperties": false
+            },
+            "outputSchema": render_output_schema(),
+        },
+        {
+            "name": NETWORK_TOOL_NAME,
+            "title": "Follow an appendix network",
+            "description": "Follow appendix relationships: formula-to-formula derivation, \
+                formula-to-medicinal composition, or point-to-named-combination membership. \
+                Edges carry a relation and a source line. The point domain covers named \
+                combining-point entries, not arbitrary co-occurrence in prose.",
+            "annotations": { "readOnlyHint": true, "openWorldHint": false },
+            "inputSchema": network_input_schema(),
+            "outputSchema": network_output_schema(),
+        },
+        {
+            "name": RENDER_NETWORK_TOOL_NAME,
+            "title": "Render an appendix network as a PNG",
+            "description": "Render an appendix network as a PNG using the same arguments as \
+                related_network. The file is written to --pages-dir when configured, otherwise \
+                the system temporary directory.",
+            "annotations": { "readOnlyHint": true, "openWorldHint": false },
+            "inputSchema": network_input_schema(),
+            "outputSchema": render_network_output_schema(),
         }
     ])
 }
@@ -215,8 +409,56 @@ fn to_scope(
     })
 }
 
+fn to_network_domain(value: Option<&Value>) -> Result<NetworkDomain, ToolArgumentError> {
+    let value = value.ok_or_else(|| {
+        ToolArgumentError(
+            "\"domain\" is required (formula, medicinal, or point_combination).".to_owned(),
+        )
+    })?;
+    let text = value.as_str().ok_or_else(|| {
+        ToolArgumentError(
+            "\"domain\" must be one of: formula, medicinal, point_combination.".to_owned(),
+        )
+    })?;
+    NetworkDomain::parse(text).ok_or_else(|| {
+        ToolArgumentError(format!(
+            "\"domain\" must be one of: formula, medicinal, point_combination; got {text:?}."
+        ))
+    })
+}
+
+fn to_graph_direction(
+    value: Option<&Value>,
+    field: &str,
+    default_value: GraphDirection,
+) -> Result<GraphDirection, ToolArgumentError> {
+    let Some(value) = value else {
+        return Ok(default_value);
+    };
+    if value.is_null() {
+        return Ok(default_value);
+    }
+    let text = value.as_str().ok_or_else(|| {
+        ToolArgumentError(format!(
+            "\"{field}\" must be one of: outgoing, incoming, both."
+        ))
+    })?;
+    GraphDirection::parse(text).ok_or_else(|| {
+        ToolArgumentError(format!(
+            "\"{field}\" must be one of: outgoing, incoming, both; got {text:?}."
+        ))
+    })
+}
+
+enum SearchBackend {
+    Lexical,
+    #[cfg(feature = "semantic")]
+    Semantic(Arc<SemanticEngine>),
+}
+
 async fn run_search(
-    dictionary: &Dictionary,
+    dictionary: &Arc<Dictionary>,
+    backend: SearchBackend,
     args: &Map<String, Value>,
     cancel: CancellationToken,
     pages: Option<&Pages>,
@@ -232,17 +474,39 @@ async fn run_search(
     if cancel.is_cancelled() {
         return Err(DictionaryError::aborted().into());
     }
-    let mut response = dictionary.search(&SearchRequest {
+    let request = SearchRequest {
         query,
         scope,
         limit,
-    })?;
+    };
+    let mut response = match backend {
+        SearchBackend::Lexical => dictionary.search(&request)?,
+        #[cfg(feature = "semantic")]
+        SearchBackend::Semantic(engine) => {
+            let dictionary = Arc::clone(dictionary);
+            let cancel_task = cancel.clone();
+            let handle = tokio::task::spawn_blocking(move || engine.search(&dictionary, &request));
+            tokio::select! {
+                result = handle => match result {
+                    Ok(response) => response?,
+                    Err(error) => {
+                        return Err(DictionaryError::new(
+                            format!("semantic search task failed: {error}"),
+                            DictionaryErrorCode::InvalidRequest,
+                        )
+                        .into());
+                    }
+                },
+                _ = cancel_task.cancelled() => return Err(DictionaryError::aborted().into()),
+            }
+        }
+    };
     if cancel.is_cancelled() {
         return Err(DictionaryError::aborted().into());
     }
     if let Some(pages) = pages {
         for suggestion in &mut response.suggestions {
-            if let Some(path) = pages.page_for(dictionary, &suggestion.term) {
+            if let Some(path) = pages.page_for(dictionary.as_ref(), &suggestion.term) {
                 suggestion.page = Some(path.display().to_string());
             }
         }
@@ -311,17 +575,376 @@ async fn run_entry(
     }))
 }
 
+async fn run_related(
+    dictionary: &Dictionary,
+    args: &Map<String, Value>,
+    cancel: CancellationToken,
+) -> Result<Value, CallToolError> {
+    let term = to_required_string(
+        args.get("term"),
+        "term",
+        Some("Example: {\"term\":\"alpha swelling\"}."),
+    )?;
+    let direction = to_graph_direction(args.get("direction"), "direction", GraphDirection::Both)?;
+    let depth = to_integer(
+        args.get("depth"),
+        "depth",
+        DEFAULT_GRAPH_DEPTH,
+        1,
+        graph::MAX_DEPTH,
+    )?;
+    let limit = to_integer(
+        args.get("limit"),
+        "limit",
+        DEFAULT_GRAPH_LIMIT,
+        1,
+        graph::MAX_LIMIT,
+    )?;
+
+    if cancel.is_cancelled() {
+        return Err(DictionaryError::aborted().into());
+    }
+    let response = dictionary.related(&GraphRequest {
+        term,
+        direction,
+        depth,
+        limit,
+    })?;
+    if cancel.is_cancelled() {
+        return Err(DictionaryError::aborted().into());
+    }
+
+    let text = render_related_text(&response);
+    Ok(json!({
+        "content": [{ "type": "text", "text": text }],
+        "structuredContent": response,
+    }))
+}
+
+async fn run_render(
+    dictionary: &Dictionary,
+    args: &Map<String, Value>,
+    cancel: CancellationToken,
+    pages: Option<&Pages>,
+) -> Result<Value, CallToolError> {
+    let term = to_required_string(
+        args.get("term"),
+        "term",
+        Some("Example: {\"term\":\"spleen\",\"depth\":2}."),
+    )?;
+    let direction = to_graph_direction(args.get("direction"), "direction", GraphDirection::Both)?;
+    let depth = to_integer(
+        args.get("depth"),
+        "depth",
+        DEFAULT_GRAPH_DEPTH,
+        1,
+        graph::MAX_DEPTH,
+    )?;
+    let limit = to_integer(
+        args.get("limit"),
+        "limit",
+        DEFAULT_GRAPH_LIMIT,
+        1,
+        graph::MAX_LIMIT,
+    )?;
+
+    if cancel.is_cancelled() {
+        return Err(DictionaryError::aborted().into());
+    }
+    let response = dictionary.related(&GraphRequest {
+        term,
+        direction,
+        depth,
+        limit,
+    })?;
+    if cancel.is_cancelled() {
+        return Err(DictionaryError::aborted().into());
+    }
+
+    let directory = pages
+        .map(|pages| pages.directory().to_path_buf())
+        .unwrap_or_else(|| std::env::temp_dir().join("mcp-chinese-dict-graphs"));
+    let rendered =
+        graph_image::render(&response, &directory).map_err(DictionaryError::unreadable)?;
+    let path = std::path::absolute(&rendered.path).unwrap_or(rendered.path);
+    let text = format!(
+        "{}\n\nImage: {}\n",
+        render_related_text(&response),
+        path.display()
+    );
+    let encoded = STANDARD.encode(&rendered.bytes);
+    Ok(json!({
+        "content": [
+            { "type": "text", "text": text },
+            { "type": "image", "data": encoded, "mimeType": "image/png" }
+        ],
+        "structuredContent": GraphImageResponse {
+            graph: response,
+            image_path: path.display().to_string(),
+            mime_type: "image/png".to_owned(),
+            width: rendered.width,
+            height: rendered.height,
+        }
+    }))
+}
+
+async fn run_network(
+    dictionary: &Dictionary,
+    args: &Map<String, Value>,
+    cancel: CancellationToken,
+) -> Result<Value, CallToolError> {
+    let term = to_required_string(
+        args.get("term"),
+        "term",
+        Some("Example: {\"term\":\"Four Gentlemen Decoction\",\"domain\":\"formula\"}."),
+    )?;
+    let domain = to_network_domain(args.get("domain"))?;
+    let direction = to_graph_direction(args.get("direction"), "direction", GraphDirection::Both)?;
+    let depth = to_integer(
+        args.get("depth"),
+        "depth",
+        DEFAULT_GRAPH_DEPTH,
+        1,
+        graph::MAX_DEPTH,
+    )?;
+    let limit = to_integer(
+        args.get("limit"),
+        "limit",
+        DEFAULT_GRAPH_LIMIT,
+        1,
+        graph::MAX_LIMIT,
+    )?;
+
+    if cancel.is_cancelled() {
+        return Err(DictionaryError::aborted().into());
+    }
+    let response = dictionary.related_network(&NetworkRequest {
+        term,
+        domain,
+        direction,
+        depth,
+        limit,
+    })?;
+    if cancel.is_cancelled() {
+        return Err(DictionaryError::aborted().into());
+    }
+    let text = render_network_text(&response);
+    Ok(json!({
+        "content": [{ "type": "text", "text": text }],
+        "structuredContent": response,
+    }))
+}
+
+async fn run_render_network(
+    dictionary: &Dictionary,
+    args: &Map<String, Value>,
+    cancel: CancellationToken,
+    pages: Option<&Pages>,
+) -> Result<Value, CallToolError> {
+    let term = to_required_string(
+        args.get("term"),
+        "term",
+        Some("Example: {\"term\":\"Four Gentlemen Decoction\",\"domain\":\"formula\"}."),
+    )?;
+    let domain = to_network_domain(args.get("domain"))?;
+    let direction = to_graph_direction(args.get("direction"), "direction", GraphDirection::Both)?;
+    let depth = to_integer(
+        args.get("depth"),
+        "depth",
+        DEFAULT_GRAPH_DEPTH,
+        1,
+        graph::MAX_DEPTH,
+    )?;
+    let limit = to_integer(
+        args.get("limit"),
+        "limit",
+        DEFAULT_GRAPH_LIMIT,
+        1,
+        graph::MAX_LIMIT,
+    )?;
+
+    if cancel.is_cancelled() {
+        return Err(DictionaryError::aborted().into());
+    }
+    let network = dictionary.related_network(&NetworkRequest {
+        term,
+        domain,
+        direction,
+        depth,
+        limit,
+    })?;
+    if cancel.is_cancelled() {
+        return Err(DictionaryError::aborted().into());
+    }
+    let graph = network_to_graph(&network);
+    let directory = pages
+        .map(|pages| pages.directory().to_path_buf())
+        .unwrap_or_else(|| std::env::temp_dir().join("mcp-chinese-dict-graphs"));
+    let rendered = graph_image::render(&graph, &directory).map_err(DictionaryError::unreadable)?;
+    let path = std::path::absolute(&rendered.path).unwrap_or(rendered.path);
+    let text = format!(
+        "{}\n\nImage: {}\n",
+        render_network_text(&network),
+        path.display()
+    );
+    let encoded = STANDARD.encode(&rendered.bytes);
+    Ok(json!({
+        "content": [
+            { "type": "text", "text": text },
+            { "type": "image", "data": encoded, "mimeType": "image/png" }
+        ],
+        "structuredContent": NetworkImageResponse {
+            network,
+            image_path: path.display().to_string(),
+            mime_type: "image/png".to_owned(),
+            width: rendered.width,
+            height: rendered.height,
+        }
+    }))
+}
+
+fn network_to_graph(network: &NetworkResponse) -> GraphResponse {
+    GraphResponse {
+        query: network.query.clone(),
+        term: network.term.clone(),
+        anchor: None,
+        direction: network.direction,
+        depth: network.depth,
+        nodes: network
+            .nodes
+            .iter()
+            .map(|node| GraphNode {
+                source: node.source,
+                term: node.term.clone(),
+                id: node.id.clone(),
+                anchor: None,
+                file: node.file.clone(),
+                citation: node.citation.clone(),
+                source_file: node.source_file.clone(),
+                line: node.line,
+                distance: node.distance,
+                edge_direction: node.edge_direction,
+                via: node.via.clone(),
+                link_text: format!("{}: {}", node.relation.as_str(), node.label),
+                redirect: false,
+            })
+            .collect(),
+        total: network.total,
+        truncated: network.truncated,
+    }
+}
+
+fn render_network_text(response: &NetworkResponse) -> String {
+    if response.nodes.is_empty() {
+        return format!(
+            "No related {} nodes for {:?} in direction {} within depth {}.",
+            response.domain.as_str(),
+            response.term,
+            response.direction.as_str(),
+            response.depth
+        );
+    }
+    let mut lines = vec![format!(
+        "{} related {} node{} for {:?} ({} · depth {}):",
+        response.nodes.len(),
+        response.node_type.as_str(),
+        if response.nodes.len() == 1 { "" } else { "s" },
+        response.term,
+        response.direction.as_str(),
+        response.depth
+    )];
+    lines.push(String::new());
+    for (index, node) in response.nodes.iter().enumerate() {
+        let mut header = format!(
+            "{}. {} [{}] — {} · {}",
+            index + 1,
+            node.term,
+            node.node_type.as_str(),
+            node.source.as_str(),
+            node.citation
+        );
+        if let Some(id) = &node.id {
+            header.push_str(&format!(" · {id}"));
+        }
+        lines.push(header);
+        if let Some(path) = &node.source_file {
+            match node.line {
+                Some(line) => lines.push(format!("   Source: {path}:{line}")),
+                None => lines.push(format!("   Source: {path}")),
+            }
+        }
+        lines.push(format!(
+            "   {} · via {} · {}",
+            node.edge_direction.as_str(),
+            node.via,
+            node.relation.as_str()
+        ));
+        if !node.label.is_empty() {
+            lines.push(format!("   {}", node.label));
+        }
+        lines.push(String::new());
+    }
+    if response.truncated || response.total > response.nodes.len() {
+        lines.push(format!(
+            "(Showing {} of {} reachable nodes; lower depth or raise limit.)",
+            response.nodes.len(),
+            response.total
+        ));
+    }
+    lines.join("\n").trim_end().to_owned()
+}
+
 /// Execute one `tools/call`.
 pub async fn call_tool(
-    dictionary: &Dictionary,
+    dictionary: &Arc<Dictionary>,
     name: &str,
     args: &Map<String, Value>,
     cancel: CancellationToken,
     pages: Option<&Pages>,
 ) -> Result<Value, CallToolError> {
+    call_tool_inner(
+        dictionary,
+        SearchBackend::Lexical,
+        name,
+        args,
+        cancel,
+        pages,
+    )
+    .await
+}
+
+#[cfg(feature = "semantic")]
+pub async fn call_tool_with_semantic(
+    dictionary: &Arc<Dictionary>,
+    semantic: Option<Arc<SemanticEngine>>,
+    name: &str,
+    args: &Map<String, Value>,
+    cancel: CancellationToken,
+    pages: Option<&Pages>,
+) -> Result<Value, CallToolError> {
+    let backend = match semantic {
+        Some(engine) => SearchBackend::Semantic(engine),
+        None => SearchBackend::Lexical,
+    };
+    call_tool_inner(dictionary, backend, name, args, cancel, pages).await
+}
+
+async fn call_tool_inner(
+    dictionary: &Arc<Dictionary>,
+    backend: SearchBackend,
+    name: &str,
+    args: &Map<String, Value>,
+    cancel: CancellationToken,
+    pages: Option<&Pages>,
+) -> Result<Value, CallToolError> {
+    let dictionary_ref = dictionary.as_ref();
     match name {
-        SEARCH_TOOL_NAME => run_search(dictionary, args, cancel, pages).await,
-        ENTRY_TOOL_NAME => run_entry(dictionary, args, cancel, pages).await,
+        SEARCH_TOOL_NAME => run_search(dictionary, backend, args, cancel, pages).await,
+        ENTRY_TOOL_NAME => run_entry(dictionary_ref, args, cancel, pages).await,
+        RELATED_TOOL_NAME => run_related(dictionary_ref, args, cancel).await,
+        RENDER_TOOL_NAME => run_render(dictionary_ref, args, cancel, pages).await,
+        NETWORK_TOOL_NAME => run_network(dictionary_ref, args, cancel).await,
+        RENDER_NETWORK_TOOL_NAME => run_render_network(dictionary_ref, args, cancel, pages).await,
         other => Err(UnknownToolError {
             name: other.to_owned(),
         }
@@ -388,6 +1011,76 @@ fn error_text(error: &DictionaryError, page_for: &dyn Fn(&str) -> Option<String>
         DictionaryErrorCode::Aborted => "Request cancelled.".to_owned(),
         _ => format!("Dictionary error ({}): {}", error.code, error.message),
     }
+}
+
+fn render_related_text(response: &GraphResponse) -> String {
+    if response.nodes.is_empty() {
+        return format!(
+            "No related entries for {:?} in direction {} within depth {}.",
+            response.term,
+            response.direction.as_str(),
+            response.depth
+        );
+    }
+
+    let mut lines = vec![format!(
+        "{} related entr{} for {:?} ({} · depth {}):",
+        response.nodes.len(),
+        if response.nodes.len() == 1 {
+            "y"
+        } else {
+            "ies"
+        },
+        response.term,
+        response.direction.as_str(),
+        response.depth
+    )];
+    lines.push(String::new());
+
+    for (index, node) in response.nodes.iter().enumerate() {
+        let mut header = format!("{}. {}", index + 1, node.term);
+        if let Some(id) = &node.id {
+            header.push_str(&format!(" [{id}]"));
+        }
+        header.push_str(" — dictionary · ");
+        match (&node.source_file, node.line) {
+            (Some(path), Some(line)) => header.push_str(&format!("{path}:{line}")),
+            (Some(path), None) => header.push_str(path),
+            _ => header.push_str(&node.citation),
+        }
+        if let Some(anchor) = &node.anchor {
+            header.push_str(&format!(" · anchor {anchor}"));
+        }
+        lines.push(header);
+
+        if let Some(path) = &node.source_file {
+            match node.line {
+                Some(line) => lines.push(format!("   Source: {path}:{line}")),
+                None => lines.push(format!("   Source: {path}")),
+            }
+        }
+        lines.push(format!(
+            "   {} · via {} · link {:?}",
+            node.edge_direction.as_str(),
+            node.via,
+            node.link_text
+        ));
+        if node.redirect {
+            lines.push("   redirect entry".to_owned());
+        }
+        lines.push(String::new());
+    }
+
+    if response.truncated || response.total > response.nodes.len() {
+        lines.push(format!(
+            "(Showing {} of {} reachable entries; lower depth or raise limit.)",
+            response.nodes.len(),
+            response.total
+        ));
+        lines.push(String::new());
+    }
+    lines.push("To read one, call get_entry with its term or anchor.".to_owned());
+    lines.join("\n").trim_end().to_owned()
 }
 
 fn render_suggestions(suggestions: &[Suggestion]) -> String {
@@ -460,6 +1153,7 @@ fn render_search_text(response: &SearchResponse) -> String {
                 MatchKind::Alias => "alias",
                 MatchKind::Body => "body",
                 MatchKind::Id => "identifier",
+                MatchKind::Semantic => "semantic",
             },
             hit.score
         ));
@@ -652,6 +1346,24 @@ fn render_entry(response: &EntryResponse, reopen_hint: bool, link: Option<PageLi
 mod tests {
     use super::*;
 
+    #[tokio::test]
+    async fn a_cancelled_search_returns_aborted() {
+        let dictionary = Arc::new(Dictionary::empty());
+        let mut arguments = Map::new();
+        arguments.insert("query".to_owned(), json!("alpha"));
+        let cancel = CancellationToken::new();
+        cancel.cancel();
+        let error = call_tool(&dictionary, SEARCH_TOOL_NAME, &arguments, cancel, None)
+            .await
+            .unwrap_err();
+        match error {
+            CallToolError::Dictionary(error) => {
+                assert_eq!(error.code, DictionaryErrorCode::Aborted)
+            }
+            other => panic!("expected an aborted dictionary error, got {other:?}"),
+        }
+    }
+
     fn args(value: Value) -> Map<String, Value> {
         value.as_object().cloned().expect("test args are an object")
     }
@@ -700,12 +1412,22 @@ mod tests {
     fn tool_definitions_stay_inside_the_supported_schema_subset() {
         let definitions = tool_definitions();
         let tools = definitions.as_array().expect("tools is an array");
-        assert_eq!(tools.len(), 2);
+        assert_eq!(tools.len(), 6);
         let names: Vec<&str> = tools
             .iter()
             .filter_map(|tool| tool.get("name").and_then(Value::as_str))
             .collect();
-        assert_eq!(names, vec![SEARCH_TOOL_NAME, ENTRY_TOOL_NAME]);
+        assert_eq!(
+            names,
+            vec![
+                SEARCH_TOOL_NAME,
+                ENTRY_TOOL_NAME,
+                RELATED_TOOL_NAME,
+                RENDER_TOOL_NAME,
+                NETWORK_TOOL_NAME,
+                RENDER_NETWORK_TOOL_NAME
+            ]
+        );
         for tool in tools {
             assert!(tool.get("inputSchema").is_some());
             assert!(tool.get("outputSchema").is_some());
@@ -717,7 +1439,10 @@ mod tests {
         let error = UnknownToolError {
             name: "nope".to_owned(),
         };
-        assert!(error.to_string().contains("search_dictionary, get_entry"));
+        assert!(error.to_string().contains(
+            "search_dictionary, get_entry, related_entries, render_graph, \
+                     related_network, render_network"
+        ));
     }
 
     #[test]
@@ -866,5 +1591,84 @@ mod tests {
             !linked.contains("(dictionary-a1ZZZ.md)"),
             "no link is invented: {linked}"
         );
+    }
+
+    #[cfg(feature = "semantic")]
+    #[tokio::test]
+    async fn a_cancelled_semantic_search_returns_aborted() {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+        use std::time::Duration;
+
+        use crate::logging::Logger;
+        use crate::semantic::{
+            EmbeddingProfile, HybridOptions, IndexMetadata, OllamaClient, OllamaEmbedder,
+            SemanticEngine, SemanticIndex,
+        };
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let handle = std::thread::spawn(move || {
+            let (mut stream, _) = listener.accept().unwrap();
+            let mut buffer = [0u8; 8192];
+            let _ = stream.read(&mut buffer);
+            std::thread::sleep(Duration::from_millis(500));
+            let body = r#"{"embeddings":[[1.0,0.0]]}"#;
+            let response = format!(
+                "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: \
+                 {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            );
+            let _ = stream.write_all(response.as_bytes());
+        });
+        let client = OllamaClient::query(&url).unwrap();
+        let profile = EmbeddingProfile::for_model("fake");
+        let embedder = OllamaEmbedder::new(client.clone(), "fake", profile, 2);
+        let index = SemanticIndex::new(
+            IndexMetadata {
+                package_version: env!("CARGO_PKG_VERSION").to_owned(),
+                dictionary_fingerprint: String::new(),
+                model_name: "fake".to_owned(),
+                model_digest: "digest".to_owned(),
+                dimensions: 2,
+                profile_hash: "profile".to_owned(),
+            },
+            Vec::new(),
+        )
+        .unwrap();
+        let engine = SemanticEngine::new(
+            embedder,
+            index,
+            HybridOptions::default(),
+            Logger::new(false),
+            client,
+            "fake",
+            "digest",
+        );
+
+        let dictionary = Arc::new(Dictionary::empty());
+        let arguments = json!({"query": "zzz", "limit": 5});
+        let cancel = CancellationToken::new();
+        let cancel_task = cancel.clone();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            cancel_task.cancel();
+        });
+        let error = run_search(
+            &dictionary,
+            SearchBackend::Semantic(Arc::new(engine)),
+            arguments.as_object().unwrap(),
+            cancel,
+            None,
+        )
+        .await
+        .unwrap_err();
+        match error {
+            CallToolError::Dictionary(error) => {
+                assert_eq!(error.code, DictionaryErrorCode::Aborted)
+            }
+            other => panic!("expected an aborted dictionary error, got {other:?}"),
+        }
+        handle.join().unwrap();
     }
 }

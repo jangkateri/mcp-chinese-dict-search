@@ -87,7 +87,10 @@ pub struct ToolArgumentError(pub String);
 
 /// Raised when `tools/call` names a tool this server does not publish.
 #[derive(Debug, thiserror::Error)]
-#[error("Unknown tool: {name:?}. Available tools: search_dictionary, get_entry.")]
+#[error(
+    "Unknown tool: {name:?}. Available tools: search_dictionary, get_entry, related_entries, \
+     render_graph, related_network, render_network."
+)]
 pub struct UnknownToolError {
     pub name: String,
 }

@@ -158,8 +158,10 @@ pub async fn run_with(args: Vec<String>, env: HashMap<String, String>) -> i32 {
     ));
     logger.debug(format!(
         "index: {} anchors, {} recovered entry anchors, {} recovered link targets, {} pinyin tone \
-         keys, {} pinyin toneless keys, {} Han keys, {} resolved links, {} unresolved, {} anchorless \
-         entries, {} duplicate headwords, {} alias failures, {} appendix header failures",
+         keys, {} pinyin toneless keys, {} Han keys, {} resolved links, {} unresolved, {} graph \
+         nodes, {} graph edges, {} unmapped graph links, {} formula edges, {} formula-medicinal \
+         edges, {} point combinations, {} anchorless entries, {} duplicate headwords, {} alias \
+         failures, {} appendix header failures",
         report.index_anchors,
         report.recovered_entry_anchors,
         report.recovered_link_targets,
@@ -168,6 +170,12 @@ pub async fn run_with(args: Vec<String>, env: HashMap<String, String>) -> i32 {
         report.han_keys,
         report.resolved_links,
         report.unresolved_links,
+        report.graph_nodes,
+        report.graph_edges,
+        report.graph_unmapped_links,
+        report.network_formula_edges,
+        report.network_formula_medicinal_edges,
+        report.network_point_combinations,
         report.anchorless_entries,
         report.duplicate_headwords,
         report.alias_parse_failures,
@@ -206,6 +214,112 @@ pub async fn run_with(args: Vec<String>, env: HashMap<String, String>) -> i32 {
         return EXIT_OK;
     }
 
+    #[cfg(feature = "semantic")]
+    {
+        let model = config.embedding_model.as_deref().unwrap_or_default();
+        if config.build_semantic_index {
+            return match crate::semantic::startup::build(
+                &dictionary,
+                &config.data,
+                config.cache_dir.as_deref(),
+                model,
+                &config.ollama_url,
+                config.embedding_profile.as_deref(),
+                config.semantic_index.as_deref(),
+                &logger,
+            ) {
+                Ok(report) => {
+                    logger.info(format!(
+                        "semantic index ready: {} records, {} dimensions, {} bytes at {}",
+                        report.documents,
+                        report.dimensions,
+                        report.bytes,
+                        report.index_path.display()
+                    ));
+                    EXIT_OK
+                }
+                Err(error) => {
+                    eprintln!("{SERVER_NAME}: {error}");
+                    EXIT_FAILURE
+                }
+            };
+        }
+        if config.check_semantic {
+            return match crate::semantic::startup::check(
+                &dictionary,
+                &config.data,
+                config.cache_dir.as_deref(),
+                model,
+                &config.ollama_url,
+                config.embedding_profile.as_deref(),
+                config.semantic_index.as_deref(),
+            ) {
+                Ok(report) => {
+                    println!("{report}");
+                    EXIT_OK
+                }
+                Err(error) => {
+                    eprintln!("{SERVER_NAME}: {error}");
+                    EXIT_FAILURE
+                }
+            };
+        }
+        if config.prune_semantic_index {
+            return match crate::semantic::startup::prune(
+                &dictionary,
+                &config.data,
+                config.cache_dir.as_deref(),
+                model,
+                &config.ollama_url,
+                config.embedding_profile.as_deref(),
+                config.semantic_index.as_deref(),
+                config.yes,
+            ) {
+                Ok(report) => {
+                    for path in &report.kept {
+                        println!("kept {}", path.display());
+                    }
+                    for path in &report.removed {
+                        println!("removed {}", path.display());
+                    }
+                    for path in &report.planned {
+                        println!("would remove {} (pass --yes to delete)", path.display());
+                    }
+                    if report.removed.is_empty() && report.planned.is_empty() {
+                        println!("no stale semantic indexes to remove");
+                    }
+                    EXIT_OK
+                }
+                Err(error) => {
+                    eprintln!("{SERVER_NAME}: {error}");
+                    EXIT_FAILURE
+                }
+            };
+        }
+    }
+
+    #[cfg(feature = "semantic")]
+    let semantic = if let Some(model) = config.embedding_model.as_deref() {
+        let options = crate::semantic::ServeOptions {
+            data: &config.data,
+            cache_dir: config.cache_dir.as_deref(),
+            model,
+            ollama_url: &config.ollama_url,
+            index_override: config.semantic_index.as_deref(),
+            profile_path: config.embedding_profile.as_deref(),
+            require: config.require_semantic,
+        };
+        match crate::semantic::startup::load_engine(&dictionary, &options, &logger) {
+            Ok(engine) => engine.map(Arc::new),
+            Err(error) => {
+                eprintln!("{SERVER_NAME}: {error}");
+                return EXIT_CONFIG;
+            }
+        }
+    } else {
+        None
+    };
+
     let pages = match config.pages_dir.as_deref() {
         Some(directory) => match Pages::new(directory) {
             Ok(pages) => {
@@ -230,7 +344,12 @@ pub async fn run_with(args: Vec<String>, env: HashMap<String, String>) -> i32 {
         None => None,
     };
 
-    let mut server = McpServer::new(Arc::new(dictionary), logger.clone());
+    let dictionary = Arc::new(dictionary);
+    let mut server = McpServer::new(Arc::clone(&dictionary), logger.clone());
+    #[cfg(feature = "semantic")]
+    {
+        server = server.with_semantic(semantic);
+    }
     if let Some(pages) = pages {
         server = server.with_pages(pages);
     }

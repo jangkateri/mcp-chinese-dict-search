@@ -4,6 +4,9 @@
 *.epub
 *.log
 *.lookup-cache-v*.json
+*.semantic-cache-*.bin
+queries.local.json
+evaluation-results*.json
 .credentials
 /data/
 
