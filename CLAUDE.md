@@ -16,8 +16,9 @@ and exposes six tools: `search_dictionary`, `get_entry`, `related_entries`, `ren
 pages so a citation can be clicked. `related_entries` follows the resolved cross-reference graph
 in either direction; `render_graph` draws it as a PNG. `related_network` covers formula families,
 formula-medicinal composition, and named point combinations; `render_network` draws those. An
-optional `semantic` Cargo feature adds gated hybrid retrieval over a loopback-only Ollama
-embedding model; the default build, configuration, and dependency set stay lexical-only.
+`semantic` Cargo feature adds gated hybrid retrieval over a loopback-only Ollama embedding model;
+it is a default feature in 0.6.0, but retrieval stays lexical until `--embedding-model` is supplied.
+`--no-default-features` produces the minimal lexical-only build and dependency set.
 See [`PLAN.md`](PLAN.md) for the full design and [`CHECKLIST.md`](CHECKLIST.md) for live status,
 and [`ENHANCEMENT-PLAN.md`](ENHANCEMENT-PLAN.md) for the semantic design and phases.
 
@@ -32,8 +33,8 @@ or `dictionary::related` / `dictionary::related_network`, renders model-facing t
 `graph_image.rs` for PNG output;
 `resources.rs` and `prompts.rs` serve the same entry text as addressable resources and the
 `citation` prompt, and `pages.rs` writes the clickable citation page
-when a page directory is configured. `semantic/` (feature-gated) holds the Ollama client, model
-profiles, flat index, gated fusion, and serving engine. `schema.rs` derives each tool's `outputSchema` from the
+when a page directory is configured. `semantic/` (default feature; inert until configured) holds the
+Ollama client, model profiles, flat index, gated fusion, and serving engine. `schema.rs` derives each tool's `outputSchema` from the
 serialized response type, so the advertised contract and the payload cannot drift.
 `dictionary/linked.rs` builds the one-time linked copy (`--build-linked-data`) that restores the
 anchors the conversion dropped. The dictionary is immutable after startup.

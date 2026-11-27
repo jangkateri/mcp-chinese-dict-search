@@ -150,19 +150,28 @@ jobs:
           if-no-files-found: error
 ```
 
-## Optional semantic feature
+## Semantic feature (default)
 
-The default build links no HTTP client and is lexical-only. To build the gated Ollama fallback:
+The default build includes `ureq` and the `src/semantic/` modules. Semantic retrieval is still
+inactive until `--embedding-model` is supplied, and it requires a local Ollama server and a
+separately built index at runtime. No model weights enter the binary or the repository.
 
 ```sh
-cargo build --release --features semantic
-cargo clippy --all-targets --features semantic -- -D warnings
-cargo test --all-targets --features semantic
+cargo build --release
+cargo clippy --all-targets -- -D warnings
+cargo test --all-targets
 ```
 
-The feature adds `ureq` and the `src/semantic/` modules. It still requires a local Ollama server
-and a separately built index at runtime; no model weights enter the binary or the repository. The
-default `cargo tree` must not contain `ureq`; check with `cargo tree | grep ureq`.
+For a minimal lexical-only build with no HTTP client:
+
+```sh
+cargo build --release --no-default-features
+cargo clippy --all-targets --no-default-features -- -D warnings
+cargo test --all-targets --no-default-features
+```
+
+Check the dependency set with `cargo tree` (default contains `ureq`) and
+`cargo tree --no-default-features` (no `ureq`).
 
 ## Windows bundle
 

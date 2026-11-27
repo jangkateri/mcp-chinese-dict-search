@@ -10,12 +10,14 @@
       ]
     },
     "chinese-medicine-dictionary-semantic": {
-      "command": "C:/path/to/semantic/mcp-chinese-dict-search.exe",
+      "command": "C:/path/to/mcp-chinese-dict-search.exe",
       "args": [
         "--data",
         "C:/path/to/mcp-dict-data",
         "--pages-dir",
         "C:/mcp-dict-pages",
+        "--cache-dir",
+        "C:/mcp-dict-semantic",
         "--embedding-model",
         "embeddinggemma:latest",
         "--ollama-url",

@@ -240,13 +240,16 @@ To build the indices and write the cache without starting a client, run:
 It prints the key counts and the cache path to stderr and exits; exit code `1` means the cache
 could not be written. An ordinary startup after that is a cache hit.
 
-## Optional semantic index (Ollama)
+## Semantic index (Ollama)
 
-The Windows bundle is built from the default feature set and is lexical-only. To enable gated
-hybrid retrieval, build locally with the optional feature and install a local embedding model:
+The Windows bundle includes the semantic feature but stays lexical until you supply a model. To
+enable gated hybrid retrieval, install Ollama and a local embedding model. A source build uses the
+default feature set; `--no-default-features` produces the minimal lexical-only binary.
 
 ```powershell
-cargo build --release --features semantic
+# Source builds only: semantic is a default feature in 0.6.0.
+# cargo build --release
+
 # embeddinggemma:latest is the CPU-friendly choice (2K context, 768 dimensions).
 # qwen3-embedding:0.6b gives stronger non-exact Chinese separation but indexes much
 # more slowly on CPU.

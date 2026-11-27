@@ -7,7 +7,7 @@ Live tracker for [`ENHANCEMENT-PLAN.md`](ENHANCEMENT-PLAN.md).
 | Base | `0.5.0`, commit `dd684f2` |
 | Plan | [`ENHANCEMENT-PLAN.md`](ENHANCEMENT-PLAN.md) |
 | Last updated | 2026-11-27 |
-| Overall status | All phases complete; release commit `e611d42`; no push made |
+| Overall status | All phases complete; release commit `e611d42`; post-release semantic-default change; no push made |
 | Commit rule | **Do not commit until every phase is complete and verified.** One commit at the end; do not push unless asked. |
 | Network rule | No remote network. Semantic mode may call only loopback Ollama; Ollama Cloud is excluded. |
 
@@ -395,8 +395,8 @@ met, or semantic release is disabled with the negative result recorded.
   enabled**. If not enabled, update docs and do not turn it on in the release. **Accepted with
   documented limits**: measured on one English/mixed query set and one corpus; the exact pinyin
   and Chinese regression set is unchanged; full cross-model index comparison was not feasible for
-  bge-m3 on this CPU. The semantic feature stays optional and the default build remains
-  lexical-only.
+  bge-m3 on this CPU. The semantic feature stayed optional at release time; it was made a default
+  feature afterward at the user's request (see the post-release entry).
 
 ---
 
@@ -419,7 +419,8 @@ and exactly one commit is made after review. Nothing is pushed unless the user a
 - [x] D5 Update `dist/INSTALL.md`, `dist/install.ps1`, `dist/mcp-config.example.json`, and
   `BUILDING.md` for Ollama setup, model pull, index build, update, and rollback. INSTALL and
   BUILDING document the commands and results; the configuration example uses
-  `embeddinggemma:latest`; the installer remains generic and lexical-only.
+  `embeddinggemma:latest`; the installer remains generic, and the default bundle is now
+  semantic-capable but lexical until a model is configured.
 - [x] D6 Bump the version to `0.6.0` only if the enhancement is accepted; update server/version
   references and release notes. `Cargo.toml`, `Cargo.lock`, `BUILDING.md`, `PLAN.md`,
   `CHECKLIST.md`, and `dist/INSTALL.md` are at 0.6.0; the binary prints `0.6.0`.
@@ -461,6 +462,7 @@ and exactly one commit is made after review. Nothing is pushed unless the user a
 | 2026-11-27 | `embeddinggemma:latest` selected as the CPU-friendly reference primary; `qwen3-embedding:0.6b` Chinese-heavy option; `bge-m3` long-entry challenger | S0 quality checks; S4 batched CPU timing |
 | 2026-11-27 | `embeddinggemma:latest` (2K, 768 dims) used for the real S4 evaluation; Qwen3 measured ~0.86 s/doc batched at 1K vs ~0.16 s/doc for EmbeddingGemma on this CPU | Batched local benchmarks; S4.7 |
 | 2026-11-27 | Qwen3 1K compared: higher recall@5 (0.633 vs 0.567) but lower MRR (0.429 vs 0.455), lower top-1 (0.30 vs 0.40), 5.6× longer build, and larger index/RSS; EmbeddingGemma remains the default | Real 30-query evaluation, regression set, and RSS measurement |
+| 2026-11-27 | Semantic made a default Cargo feature at the user's request; runtime still opt-in via `--embedding-model`; `--no-default-features` gives the minimal lexical-only build; `dist` rebuilt semantic-capable | Default and minimal gates; shipped-bundle semantic probe |
 | 2026-11-27 | Semantic inference runs in `spawn_blocking`; digest re-check every 300 s; a changed digest disables semantic for the process | S2.7, S2.8 tests |
 | 2026-11-27 | `--prune-semantic-index` lists by default and deletes only with `--yes` | S3.3 test |
 | 2026-11-27 | Exactly one model/index active; no runtime multi-model routing or vector fusion | Avoid 3× embeddings, incompatible score spaces, and multi-GB memory |
@@ -713,4 +715,20 @@ and exactly one commit is made after review. Nothing is pushed unless the user a
 - Decision: keep **EmbeddingGemma** as the default and installed model. Qwen3 remains a supported
   alternative for Chinese-heavy or recall-first use; its digest-keyed index is retained for
   rollback and comparison.
+- No tag, push, or release.
+
+### 2026-11-27 — Post-release: semantic default and deployable evaluation tool
+
+- Changed `[features] default = ["semantic"]`. A plain `cargo build --release` and `dist` now
+  include the loopback client and semantic engine; runtime remains lexical until
+  `--embedding-model` is supplied. `--no-default-features` builds the minimal lexical-only binary.
+- Rebuilt `dist/mcp-chinese-dict-search.exe`: 3,103,744 bytes, SHA-256
+  `ca4a7a04b3bb5b26b48bebd829d94da452578dd3f8765dffe28e73d0b38e3736`. The bundle validated the
+  Qwen3 profile/index (`status: active`) and answered both semantic probes at rank 1.
+- Consolidated the local diagnostics into `tools/evaluate_semantic.py` with
+  `--embedding-profile`, `--mode`, and `--per-query`; added `tools/README.md`; removed the
+  temporary diagnostic scripts.
+- Gates: default 170 unit + 31 integration; minimal 120 unit + 29 integration; clippy clean in
+  both; fmt clean. `cargo tree` shows `ureq` by default and zero `ureq` with
+  `--no-default-features`.
 - No tag, push, or release.

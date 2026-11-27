@@ -21,8 +21,8 @@ tools:
 This repository **does not contain dictionary data**. You supply a dictionary archive (`.zip`) or
 its extracted Markdown directory in the layout described in [`PLAN.md`](PLAN.md). The data may be
 copyrighted; do not commit the archive, extracted Markdown, images, or an EPUB to a public
-repository. The default build reads local files only and makes no network requests; the optional
-`semantic` feature calls only the configured loopback Ollama server.
+repository. The default build includes the semantic feature but makes no network request until
+`--embedding-model` is supplied; when enabled, it calls only the configured loopback Ollama server.
 
 The generated lookup cache is also derived from the dictionary data. It is written beside the dictionary
 (or into `--cache-dir`) and matched by `.gitignore`; keep it out of git and `dist/`.
@@ -40,7 +40,7 @@ The generated lookup cache is also derived from the dictionary data. It is writt
 | `related_entries` graph traversal | Implemented over resolved cross-references; depth 1–3, limit 1–50 |
 | `render_graph` PNG rendering | Implemented; writes to `--pages-dir` or the system temp directory |
 | Appendix networks | `related_network` / `render_network`: formula derivation, formula ingredients, named point combinations |
-| Optional semantic fallback | Feature-gated `semantic` build; gated hybrid retrieval over a local Ollama embedding model; off by default and loopback-only |
+| Semantic fallback | Included in the default build; gated hybrid retrieval over a local Ollama embedding model; inactive unless `--embedding-model` is supplied, and loopback-only |
 | Tests | Unit and integration tests pass; `clippy -D warnings` clean |
 | Performance (Windows, development machine) | measured on the reference corpus; representative tool calls are sub-second |
 
@@ -50,10 +50,11 @@ The layout was validated against a reference conversion; no dictionary text is i
 
 - Rust and Cargo **1.99.0** (edition 2024).
 - The dictionary archive or its extracted directory.
-- No network access, daemon, API key, or external service for the default build. The optional
-  `semantic` feature additionally requires a local **Ollama** server on loopback and an embedding
-  model such as `embeddinggemma:latest` (CPU-friendly) or `qwen3-embedding:0.6b` (stronger
-  non-exact Chinese separation on CPU-tested pairs).
+- No daemon, API key, or external service unless semantic retrieval is enabled. The default build
+  includes the semantic feature; enabling it requires a local **Ollama** server on loopback and an
+  embedding model such as `embeddinggemma:latest` (CPU-friendly) or `qwen3-embedding:0.6b`
+  (stronger non-exact Chinese separation on CPU-tested pairs). A minimal lexical-only build is
+  available with `--no-default-features`.
 
 ## Quick start
 
@@ -562,10 +563,12 @@ stdout carries JSON-RPC only; every diagnostic goes to stderr. The server negoti
 protocol era (`2025-11-25`), and answers `server/discover` with `-32601` so 2026-era clients fall
 back to `initialize`.
 
-## Semantic retrieval (optional)
+## Semantic retrieval
 
-The default build is lexical-only and links no HTTP client. A build with `--features semantic`
-adds a gated fallback for paraphrases that share no token with the entry:
+The default build includes the semantic feature and the loopback HTTP client, but semantic
+retrieval stays inactive until `--embedding-model` is supplied. A minimal lexical-only build is
+available with `--no-default-features`. When enabled, it adds a gated fallback for paraphrases that
+share no token with the entry:
 
 1. Lexical search runs first and alone.
 2. The embedding model is consulted only when the best lexical score is **below 300**; exact
@@ -582,7 +585,11 @@ hosts are rejected. The MCP process holds no model weights; Ollama owns the mode
 Build and serve:
 
 ```sh
-cargo build --release --features semantic
+# Default build: semantic-capable, lexical until a model is configured.
+cargo build --release
+
+# Minimal lexical-only build (no HTTP client).
+cargo build --release --no-default-features
 
 # Confirm the model, digest, dimensions, and index status; never writes.
 mcp-chinese-dict-search --data "C:/mcp-dict-data" \
@@ -710,9 +717,9 @@ Key decisions:
 - The graph is built once from resolved `Entry.links`; it adds outgoing and incoming adjacency,
   not inferred relations.
 - Output is bounded: 5 search hits, 20 graph nodes, 20,000 characters per entry by default.
-- The default build uses no network, database, embedding model, or external service. The optional
-  `semantic` feature calls only the configured loopback Ollama HTTP endpoint, from a blocking
-  worker so the async transport is not stalled.
+- The default build makes no network request unless a semantic model is configured. When enabled,
+  it calls only the configured loopback Ollama HTTP endpoint, from a blocking worker so the async
+  transport is not stalled.
 
 ## Project layout
 
@@ -728,7 +735,7 @@ mcp-chinese-dict-search/
 │       ├── index.rs / appendix.rs / search.rs / pinyin.rs / lookup.rs
 │       ├── graph.rs
 │       └── network.rs            # formulas, medicinals, point combinations
-│   └── semantic/                 # optional `semantic` feature
+│   └── semantic/                 # default semantic feature; inert until configured
 │       ├── document.rs / embedder.rs / index.rs / fusion.rs
 │       ├── profiles.rs / ollama.rs / build.rs / engine.rs / startup.rs
 ├── tests/
@@ -749,19 +756,20 @@ cargo fmt --check
 cargo clippy --all-targets -- -D warnings
 cargo test --all-targets
 
-# Optional semantic feature; no model is needed for the unit suite.
-cargo clippy --all-targets --features semantic -- -D warnings
-cargo test --all-targets --features semantic
+# Minimal lexical-only build; no model is needed for either suite.
+cargo clippy --all-targets --no-default-features -- -D warnings
+cargo test --all-targets --no-default-features
 ```
 
-The default tests need no network. `tests/real_data.rs` checks the configured dictionary when
+The default tests need no network or model. `tests/real_data.rs` checks the configured dictionary when
 `MCP_CHINESE_DICT_DATA` is set; otherwise it prints a skip reason. `tests/semantic_gate.rs` and
 `tests/semantic_real.rs` skip with a reason unless the Ollama environment variables are set; the
 fixture suite is hermetic.
 
 `tools/evaluate_semantic.py` drives the stdio server and reports lexical and hybrid recall@5, MRR,
-top-1, and p50/p95 latency for a local JSON query set. Keep a query set derived from the
-dictionary out of git; pass it by path:
+top-1, and p50/p95 latency for a local JSON query set. It supports `--embedding-profile`,
+`--mode`, and `--per-query`; see [`tools/README.md`](tools/README.md). Keep a query set derived from
+the dictionary out of git; pass it by path:
 
 ```sh
 python -I tools/evaluate_semantic.py \

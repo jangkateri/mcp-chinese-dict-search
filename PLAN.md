@@ -2,7 +2,7 @@
 
 | Field | Value |
 |---|---|
-| Status | Working tree 0.6.0: graph traversal, graph PNGs, appendix networks, and optional gated semantic retrieval; dictionary-agnostic title, required `--data`, generic text; v0.5.0 is the last release |
+| Status | Working tree 0.6.0: graph traversal, graph PNGs, appendix networks, and gated semantic retrieval as a default feature; dictionary-agnostic title, required `--data`, generic text; v0.5.0 is the last release |
 | Version | 0.6.0 |
 | Last updated | 2026-11-27 |
 | Source specification | `PROJECT-SETUP-PROMPT.md` |
@@ -52,13 +52,15 @@ The server must let a model:
 
 ### Out of scope (v1)
 
-- RAG, generated answers, or a language model at query time. The optional `semantic` feature adds
-  retrieval, not generation, over a local embedding model; it is off in the default build and
-  tracked in [`ENHANCEMENT-PLAN.md`](ENHANCEMENT-PLAN.md).
+- RAG, generated answers, or a language model at query time. The `semantic` feature adds retrieval,
+  not generation, over a local embedding model; it is included in the default build but inactive
+  until `--embedding-model` is supplied, and is tracked in
+  [`ENHANCEMENT-PLAN.md`](ENHANCEMENT-PLAN.md).
 - Serving images over HTTP. The archive's 10 image references are all in front matter or the
   index, not inside dictionary entries; the server keeps references as text.
-- Network access in the default build. The optional semantic feature may call only a loopback
-  Ollama server; remote hosts and Ollama Cloud are rejected.
+- Network access unless semantic retrieval is enabled. The default build includes the feature, but
+  it may call only a loopback Ollama server after `--embedding-model` is supplied; remote hosts and
+  Ollama Cloud are rejected.
 - Editing or authoring dictionary content.
 - Additional books.
 
@@ -1080,8 +1082,9 @@ Phase 7A implements the pinyin- and Chinese-keyed lookup described in the specif
   `zu3 san1 li3`, `下陵`, and cache reuse/invalidation.
 
 Graph traversal is implemented over the existing resolved links. Gated local-Ollama semantic
-retrieval is implemented behind the optional `semantic` feature and tracked in
-[`ENHANCEMENT-PLAN.md`](ENHANCEMENT-PLAN.md); the default build remains lexical-only. The feature
+retrieval is implemented as a default Cargo feature and tracked in
+[`ENHANCEMENT-PLAN.md`](ENHANCEMENT-PLAN.md); the server remains lexical-only until
+`--embedding-model` is supplied. The feature
 builds a digest-keyed flat cosine index from the same entries and appendices, consults the model
 only when the best lexical score is below 300, skips pure pinyin, and merges results with
 reciprocal-rank fusion. Missing Ollama, a missing model, a stale index, or an embedding failure

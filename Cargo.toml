@@ -13,7 +13,7 @@ name = "mcp-chinese-dict-search"
 path = "src/main.rs"
 
 [features]
-default = []
+default = ["semantic"]
 semantic = ["dep:ureq"]
 
 [dependencies]

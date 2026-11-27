@@ -2,12 +2,17 @@
 
 | Field | Value |
 |---|---|
-| Status | Graph traversal and semantic core S0–S1 implemented and tested; S2 not started |
+| Status | Complete: graph traversal, PNG, networks, semantic S0–S4; semantic is a default Cargo feature since the post-release change |
 | Base | `0.5.0`, commit `dd684f2` |
 | Tracking | [`ENHANCEMENT-CHECKLIST.md`](ENHANCEMENT-CHECKLIST.md) |
 | Main plan | [`PLAN.md`](PLAN.md) |
 | Working rules | [`CLAUDE.md`](CLAUDE.md) |
 | Last updated | 2026-11-27 |
+
+> **Post-release note (2026-11-27):** the `semantic` feature became a default Cargo feature at the
+> user's request. The server still stays lexical at runtime until `--embedding-model` is supplied;
+> `--no-default-features` builds the minimal lexical-only binary. The historical statements below
+> about the default build describe the pre-change design.
 
 This document covers two additions chosen from the earlier cost analysis:
 

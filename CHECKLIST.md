@@ -8,7 +8,7 @@ it records.**
 | Project version | 0.6.0 |
 | Plan | [`PLAN.md`](PLAN.md) |
 | Last updated | 2026-11-27 |
-| Overall status | Working tree 0.6.0: graph traversal, graph PNGs, appendix networks, and optional gated semantic retrieval; v0.5.0 remains the last release |
+| Overall status | Working tree 0.6.0: graph traversal, graph PNGs, appendix networks, and gated semantic retrieval (default feature; runtime opt-in); v0.5.0 remains the last release |
 
 ## Status legend
 
@@ -451,9 +451,10 @@ Tracked in detail by [`ENHANCEMENT-CHECKLIST.md`](ENHANCEMENT-CHECKLIST.md) phas
 
 Tracked in detail by [`ENHANCEMENT-CHECKLIST.md`](ENHANCEMENT-CHECKLIST.md) phases S0–S4.
 
-- [x] Add the optional `semantic` Cargo feature and loopback-only Ollama client, digest-keyed
-  flat index, 300-point lexical gate, RRF fusion, lifecycle commands, and local evaluation
-  harness. The default build remains lexical-only and links no HTTP client.
+- [x] Add the `semantic` Cargo feature and loopback-only Ollama client, digest-keyed flat index,
+  300-point lexical gate, RRF fusion, lifecycle commands, and local evaluation harness. The feature
+  is now in the default build; the server remains lexical until `--embedding-model` is supplied,
+  and `--no-default-features` gives the minimal lexical-only binary.
   - Verification: hermetic and mock-Ollama tests; real `embeddinggemma:latest` index
     (7,042 records, 768 dimensions, 20.66 MiB); 30-query hybrid recall@5 0.567 vs lexical 0.233,
     MRR 0.455 vs 0.183, added p95 75 ms, MCP RSS +20.66 MB; exact/pinyin/Chinese regression
@@ -1032,8 +1033,8 @@ Append newest entries at the bottom. Include date, task, command/evidence, and r
 
 ### 2026-11-27 — Semantic S0–S1 core
 
-- S0: pinned `ureq` 3.5.2 behind the optional `semantic` feature; the default tree has no HTTP
-  client. Added an environment-gated real-Ollama smoke test; it passed against
+- S0: pinned `ureq` 3.5.2 behind the then-optional `semantic` feature; at that stage the default
+  tree had no HTTP client. Added an environment-gated real-Ollama smoke test; it passed against
   `qwen3-embedding:0.6b` with finite unit vectors. Go decision recorded.
 - S1: added the feature-gated `semantic` module with a fake embedder, deterministic document
   construction, a flat cosine index with a binary header and atomic save/load, digest-keyed cache
@@ -1041,7 +1042,8 @@ Append newest entries at the bottom. Include date, task, command/evidence, and r
 - Extracted `content_fingerprint(sources)` for both caches and exposed it on `Dictionary`.
 - Gates: fmt; default and feature clippy with `-D warnings`; default tests 115 unit + 29
   integration = 144; feature tests 142 unit + 30 integration = 172 with local Ollama.
-- No model or HTTP client is required by the default build or suite. No commit made.
+- At that stage no model or HTTP client was required by the default build or suite; the feature
+  later became a default feature. No commit made.
 
 ### 2026-11-27 — Semantic S2–S3 implementation
 
@@ -1068,6 +1070,21 @@ Append newest entries at the bottom. Include date, task, command/evidence, and r
 - Decision: accepted with documented limits. Version bumped to 0.6.0; final gates and bundle
   remain.
 - No commit made.
+
+### 2026-11-27 — Post-release: semantic default and deployable evaluation CLI
+
+- `semantic` is now a default Cargo feature (`default = ["semantic"]`). A plain
+  `cargo build --release` and `dist` include it; the server stays lexical at runtime until
+  `--embedding-model` is supplied. `--no-default-features` builds the minimal lexical-only binary.
+- Rebuilt `dist` semantic-capable: 3,103,744 bytes, SHA-256
+  `ca4a7a04b3bb5b26b48bebd829d94da452578dd3f8765dffe28e73d0b38e3736`. The shipped bundle validated
+  the Qwen3 index (`status: active`) and answered the two semantic probes at rank 1.
+- Consolidated the evaluation/diagnostic code into `tools/evaluate_semantic.py`, adding
+  `--embedding-profile`, `--mode`, and `--per-query`; added `tools/README.md`; removed the local
+  diagnostic scripts.
+- Gates: default 170 unit + 31 integration; minimal 120 unit + 29 integration; clippy clean in
+  both configurations; fmt clean.
+- No push, tag, or release.
 
 ---
 
