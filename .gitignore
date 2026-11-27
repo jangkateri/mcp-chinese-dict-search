@@ -9,6 +9,7 @@ queries.local.json
 evaluation-results*.json
 .credentials
 /data/
+/data-dist/
 
 # Test dictionaries are synthetic and generated in the test process.
 tests/fixtures/dictionary/
