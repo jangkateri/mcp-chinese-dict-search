@@ -70,6 +70,67 @@ cargo build --release
 
 On Windows the executable is `target\release\mcp-chinese-dict-search.exe`.
 
+### macOS Apple Silicon / M4
+
+Native arm64 build:
+
+```sh
+xcode-select --install
+rustup target add aarch64-apple-darwin
+
+cargo build --release --target aarch64-apple-darwin \
+  --bin mcp-chinese-dict-search --bin evaluate-semantic
+```
+
+Outputs:
+
+```text
+target/aarch64-apple-darwin/release/mcp-chinese-dict-search
+target/aarch64-apple-darwin/release/evaluate-semantic
+```
+
+A plain `cargo build --release` on the M4 also produces native arm64 binaries under
+`target/release/`.
+
+For a universal binary that also runs on Intel Macs:
+
+```sh
+rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+cargo build --release --target aarch64-apple-darwin \
+  --bin mcp-chinese-dict-search --bin evaluate-semantic
+cargo build --release --target x86_64-apple-darwin \
+  --bin mcp-chinese-dict-search --bin evaluate-semantic
+
+lipo -create -output mcp-chinese-dict-search \
+  target/aarch64-apple-darwin/release/mcp-chinese-dict-search \
+  target/x86_64-apple-darwin/release/mcp-chinese-dict-search
+lipo -create -output evaluate-semantic \
+  target/aarch64-apple-darwin/release/evaluate-semantic \
+  target/x86_64-apple-darwin/release/evaluate-semantic
+
+file mcp-chinese-dict-search
+# Mach-O universal binary with 2 architectures: arm64, x86_64
+```
+
+Verify the copied data and semantic index:
+
+```sh
+ollama pull qwen3-embedding:0.6b
+
+./target/aarch64-apple-darwin/release/mcp-chinese-dict-search \
+  --data /path/to/data-dist/mcp-dict-data \
+  --cache-dir /path/to/data-dist/cache \
+  --embedding-model qwen3-embedding:0.6b \
+  --embedding-profile /path/to/data-dist/cache/profile.json \
+  --check-semantic
+```
+
+`status: active` means the existing index is usable without rebuilding. Keep the data directory name
+`mcp-dict-data`: cache filenames are keyed to that stem. A locally built binary is not quarantined;
+if a copied binary is blocked, run `xattr -d com.apple.quarantine mcp-chinese-dict-search`. See
+[`BUILDING.md`](BUILDING.md) and [`dist/INSTALL-unix.md`](dist/INSTALL-unix.md) for more detail.
+
 `--data` (or `MCP_CHINESE_DICT_DATA`) is required; the server does not guess a filename. Because
 an MCP client may launch the process from another directory, use an absolute path. The display
 name in citations becomes the archive file name, the extracted directory name, or `--title`.
