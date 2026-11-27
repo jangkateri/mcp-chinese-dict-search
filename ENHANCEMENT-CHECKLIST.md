@@ -749,4 +749,6 @@ and exactly one commit is made after review. Nothing is pushed unless the user a
 - Replaced the Python evaluator with the Rust `evaluate-semantic` binary; `dist/` now ships it, and
   the Windows installer copies it. Gates: default 175 unit + 2 evaluator + 31 integration; minimal
   120 unit + 29 integration; clippy clean in both; fmt clean.
+- Removed the remaining legacy Python analysis scripts from `tools/`; the directory now contains
+  only evaluator documentation. Git history before `1f54ede` preserves the scripts.
 - No tag, push, or release.

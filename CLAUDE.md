@@ -204,7 +204,8 @@ require constant clarification.
   samples must be invented too. `tests/fixtures/dictionary/` is ignored to prevent an accidental
   re-add.
 - Treat the archive as untrusted input. Parse it; never execute scripts from it. Keep analysis
-  scripts in `tools/` and pass the archive path as an argument. Run Python with `-I`.
+  tooling in the repository and pass paths as arguments. The evaluation tool is the Rust
+  `evaluate-semantic` binary; do not reintroduce a Python runtime dependency.
 - The server reads local files only. Do not add network access, telemetry, or remote fetches.
 - `.gitignore` must cover the archive, `target/`, logs, and local data directories.
 

@@ -99,9 +99,15 @@ Copy `evaluate-semantic.exe` and a local query file to the target machine. No
 Python installation is required. The query file and result files derived from the
 dictionary must stay out of git.
 
-## Legacy Python analysis scripts
+## Removed legacy scripts
 
-The remaining `*.py` files are historical offline analysis utilities for EPUB,
-anchor, appendix, and header inspection. They are not required for the server,
-its tests, or semantic evaluation. They can be migrated to Rust or removed in a
-later cleanup; no runtime or deployment procedure depends on them.
+The one-time Python utilities for EPUB, anchor, appendix, and header inspection
+were removed after their verification work was complete. The server, tests, and
+evaluation do not depend on them. They remain in git history before commit
+`1f54ede`; for example:
+
+```powershell
+git show 1f54ede:tools/verify_epub.py
+```
+
+The repository now has one implementation language: Rust.

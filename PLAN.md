@@ -1125,17 +1125,8 @@ mcp-chinese-dict-search/
 ├── LICENSE                     # MIT (code only)
 ├── .gitignore                  # target/, archive, logs, local data
 ├── dictionary.zip            # user-supplied; never committed
-├── tools/                      # read-only source-data analysis scripts
-│   ├── inspect_dict.py
-│   ├── inspect_appendix.py
-│   ├── inspect_entries.py
-│   ├── validate_rules.py
-│   ├── validate_headers.py
-│   ├── analyze_anchors.py      # anchor shape, uniqueness, per-file coverage
-│   ├── anchor_origin.py        # serial/hash/order tests for a1XXXX
-│   ├── anchor_sequence.py      # numeric sequence and contiguous-block inspection
-│   ├── analyze_classes.py      # class-ID vs anchor-ID namespace relation
-│   └── anchor_proximity.py     # linked-term distance vs random baseline
+├── tools/                      # evaluation documentation
+│   └── README.md               # Rust evaluate-semantic usage and policy notes
 ├── src/
 │   ├── main.rs                 # thin executable entry point
 │   ├── lib.rs                  # public module map

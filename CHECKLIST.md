@@ -480,9 +480,9 @@ Append newest entries at the bottom. Include date, task, command/evidence, and r
 - Header grammar coverage: 6,352/6,352 main aliases; 403/403 appendix-1; 572/572 appendix-2;
   261/261 appendix-3 with tolerant parsing rules.
 - Created `PLAN.md`, `CHECKLIST.md`, and `CLAUDE.md`.
-- Evidence scripts: `tools/inspect_dict.py`, `tools/inspect_appendix.py`,
-  `tools/inspect_entries.py`, `tools/validate_rules.py`, `tools/validate_headers.py`, all run with
-  `python -I <script> "<archive path>"`.
+- One-time evidence scripts `inspect_dict.py`, `inspect_appendix.py`, `inspect_entries.py`,
+  `validate_rules.py`, and `validate_headers.py` were run with `python -I` against the archive.
+  They were removed after verification; recover them from git history before commit `1f54ede`.
 - Anchor-origin follow-up: all 14,225 fragment links use `a1` + three base-36 characters; the
   5,869 distinct values form a dense serial allocation (5,075 adjacent gaps of 1); CSS class IDs
   (`s1NTM`, `s1P94`, …) interleave exactly with them, proving a shared element-ID allocator;
@@ -540,9 +540,9 @@ Append newest entries at the bottom. Include date, task, command/evidence, and r
 ### 2026-11-24 — Phase 6.1, EPUB verification and corrections
 
 - Received the reference EPUB (10,856,521 bytes; ASIN
-  `B0GTMZRK1L`). Extracted read-only to `data/epub-verify-2026-11-24/`; added
-  `tools/verify_epub.py` and ran it with `python -I` against the extracted Markdown directory and
-  the EPUB.
+  `B0GTMZRK1L`). Extracted read-only to `data/epub-verify-2026-11-24/`; used a one-time
+  `verify_epub.py` script against the extracted Markdown directory and the EPUB. The script was
+  removed after verification; recover it from git history before commit `1f54ede`.
 - EPUB has 5,869 `a1…` ids (5,854 on `div`, 15 on `p`); all 5,822 index anchors exist. 47 ids are
   absent from the index: 4 entry containers, 26 TOC letters, 14 section paragraphs, 3
   introduction sections.

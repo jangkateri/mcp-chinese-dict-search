@@ -754,7 +754,7 @@ mcp-chinese-dict-search/
 │   ├── support/mod.rs
 │   ├── support/fixture.rs       # invented corpus, written at test time
 │   ├── stdio_contract.rs / tools_e2e.rs / real_data.rs / dist_bundle.rs
-├── tools/                       # legacy Python analysis scripts; not deployed
+├── tools/                       # evaluation documentation; legacy Python scripts removed
 ├── dist/                        # Windows x64 deployment bundle
 ├── PLAN.md / CHECKLIST.md / CLAUDE.md
 ├── Cargo.toml / Cargo.lock / rustfmt.toml
