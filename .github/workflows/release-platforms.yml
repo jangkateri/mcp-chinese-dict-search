@@ -44,6 +44,7 @@ jobs:
           path: mcp-chinese-dict-search-*-linux-x64.tar.gz
 
   macos-universal:
+    if: ${{ vars.ENABLE_MACOS_RUNNER == 'true' }}
     runs-on: macos-13
     steps:
       - uses: actions/checkout@v4
@@ -79,7 +80,7 @@ jobs:
           path: mcp-chinese-dict-search-*-macos-universal.tar.gz
 
   publish:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: ${{ always() && startsWith(github.ref, 'refs/tags/v') && needs.linux-x64.result == 'success' }}
     needs: [linux-x64, macos-universal]
     runs-on: ubuntu-latest
     steps:

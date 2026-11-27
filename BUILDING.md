@@ -105,13 +105,14 @@ GitHub-hosted runners:
   `mcp-chinese-dict-search-<version>-linux-x64.tar.gz`.
 - **macOS universal** — `aarch64-apple-darwin` and `x86_64-apple-darwin` binaries combined with
   `lipo`, packaged as `mcp-chinese-dict-search-<version>-macos-universal.tar.gz`. This runs natively
-  on Apple Silicon (M1–M4) and Intel.
-- **Tagged releases** — the workflow attaches both archives to the GitHub release. Manual
+  on Apple Silicon (M1–M4) and Intel. This job is **optional** and runs only when the repository
+  variable `ENABLE_MACOS_RUNNER` is set to `true`. If GitHub-hosted macOS capacity is unavailable,
+  build locally on a Mac with the instructions above.
+- **Tagged releases** — the workflow attaches the archives produced by the jobs that ran. Manual
   `workflow_dispatch` runs upload them as workflow artifacts.
 
-The macOS job uses the available `macos-13` Intel runner and cross-compiles the arm64 slice with
-the Apple SDK. The binaries are not code-signed or notarized; see `dist/INSTALL-unix.md` for the
-Gatekeeper note.
+The macOS job uses `macos-13` and cross-compiles the arm64 slice with the Apple SDK. The binaries
+are not code-signed or notarized; see `dist/INSTALL-unix.md` for the Gatekeeper note.
 
 Windows remains the local `dist/` bundle and is built on Windows.
 

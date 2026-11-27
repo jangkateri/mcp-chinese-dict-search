@@ -5,6 +5,15 @@ All notable changes to this project are documented here. The project follows
 
 ## [0.6.1] — 2026-11-27
 
+### Added
+
+- Linux x64 static release archive: `mcp-chinese-dict-search-0.6.1-linux-x64.tar.gz`
+  (2,333,410 bytes; SHA-256
+  `82e8e4fe8e56863fb40b858193fe0b3a63084a85ebc63a92b04e26ad0152a63d`).
+- Optional GitHub Actions macOS universal build (`ENABLE_MACOS_RUNNER=true`); local Apple
+  Silicon/M4 and universal build instructions remain in `BUILDING.md` and
+  `dist/INSTALL-unix.md`.
+
 ### Changed
 
 - **Semantic index compatibility is data/model-driven, not release-driven.** The package

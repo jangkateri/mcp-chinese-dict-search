@@ -1149,6 +1149,12 @@ Append newest entries at the bottom. Include date, task, command/evidence, and r
   `6dbf1c6f7a4775e453cf4e7a92573d3aa9a344b8a95b755e57fede84f7905359`. It contains the server,
   `evaluate-semantic.exe`, `INSTALL.md`, `install.ps1`, the config example, `LICENSE`,
   `SHA256SUMS.txt`, and `CHANGELOG.md`.
+- Linux asset: `mcp-chinese-dict-search-0.6.1-linux-x64.tar.gz`, 2,333,410 bytes, SHA-256
+  `82e8e4fe8e56863fb40b858193fe0b3a63084a85ebc63a92b04e26ad0152a63d`.
+- macOS universal: hosted `macos-13` capacity was unavailable (job queued for three hours and was
+  canceled). The optional workflow is gated on `ENABLE_MACOS_RUNNER=true`; local Apple Silicon/M4
+  and universal build instructions are in `BUILDING.md` and `dist/INSTALL-unix.md`. No macOS asset
+  is attached to v0.6.1.
 - Published tag and GitHub release: `v0.6.1`,
   https://github.com/jangkateri/mcp-chinese-dict-search/releases/tag/v0.6.1.
 - Gates: default 176 unit + 2 evaluator + 31 integration; minimal 120 unit + 29 integration;
