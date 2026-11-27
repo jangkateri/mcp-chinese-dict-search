@@ -1,0 +1,101 @@
+name: Build platform releases
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  linux-x64:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+      - name: Install musl tools
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - name: Build
+        env:
+          CC_x86_64_unknown_linux_musl: musl-gcc
+        run: |
+          cargo build --release --target x86_64-unknown-linux-musl \
+            --bin mcp-chinese-dict-search --bin evaluate-semantic
+      - name: Package
+        run: |
+          set -euo pipefail
+          VERSION=$(grep '^version = ' Cargo.toml | head -1 | cut -d'"' -f2)
+          STAGE=stage-linux
+          mkdir -p "$STAGE"
+          cp target/x86_64-unknown-linux-musl/release/mcp-chinese-dict-search "$STAGE/"
+          cp target/x86_64-unknown-linux-musl/release/evaluate-semantic "$STAGE/"
+          cp README.md BUILDING.md CHANGELOG.md LICENSE dist/INSTALL-unix.md "$STAGE/"
+          chmod +x "$STAGE/mcp-chinese-dict-search" "$STAGE/evaluate-semantic"
+          (cd "$STAGE" && sha256sum mcp-chinese-dict-search evaluate-semantic \
+            README.md BUILDING.md CHANGELOG.md LICENSE INSTALL-unix.md > SHA256SUMS)
+          tar -czf "mcp-chinese-dict-search-${VERSION}-linux-x64.tar.gz" -C "$STAGE" .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-x64
+          path: mcp-chinese-dict-search-*-linux-x64.tar.gz
+
+  macos-universal:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - name: Build
+        run: |
+          cargo build --release --target aarch64-apple-darwin \
+            --bin mcp-chinese-dict-search --bin evaluate-semantic
+          cargo build --release --target x86_64-apple-darwin \
+            --bin mcp-chinese-dict-search --bin evaluate-semantic
+      - name: Package universal binaries
+        run: |
+          set -euo pipefail
+          VERSION=$(grep '^version = ' Cargo.toml | head -1 | cut -d'"' -f2)
+          STAGE=stage-macos
+          mkdir -p "$STAGE"
+          lipo -create -output "$STAGE/mcp-chinese-dict-search" \
+            target/aarch64-apple-darwin/release/mcp-chinese-dict-search \
+            target/x86_64-apple-darwin/release/mcp-chinese-dict-search
+          lipo -create -output "$STAGE/evaluate-semantic" \
+            target/aarch64-apple-darwin/release/evaluate-semantic \
+            target/x86_64-apple-darwin/release/evaluate-semantic
+          cp README.md BUILDING.md CHANGELOG.md LICENSE dist/INSTALL-unix.md "$STAGE/"
+          chmod +x "$STAGE/mcp-chinese-dict-search" "$STAGE/evaluate-semantic"
+          (cd "$STAGE" && shasum -a 256 mcp-chinese-dict-search evaluate-semantic \
+            README.md BUILDING.md CHANGELOG.md LICENSE INSTALL-unix.md > SHA256SUMS)
+          tar -czf "mcp-chinese-dict-search-${VERSION}-macos-universal.tar.gz" -C "$STAGE" .
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-universal
+          path: mcp-chinese-dict-search-*-macos-universal.tar.gz
+
+  publish:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux-x64, macos-universal]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Upload assets to the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          FILES=$(find artifacts -type f \( -name '*.tar.gz' -o -name '*.zip' \))
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" $FILES --clobber
+          else
+            gh release create "$TAG" $FILES --title "$TAG" --notes-file CHANGELOG.md
+          fi
