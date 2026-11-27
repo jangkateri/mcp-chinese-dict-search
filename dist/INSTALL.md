@@ -68,13 +68,35 @@ commit it.
 
 The server is a stdio process. Use absolute paths; a quoted argument may contain spaces.
 
+For semantic retrieval, first build an index into a fixed cache directory (see
+[Semantic index](#semantic-index-ollama)), then add these arguments to every client block:
+
+```text
+--cache-dir C:/path/to/mcp-dict-semantic
+--embedding-model embeddinggemma:latest
+--ollama-url http://127.0.0.1:11434
+```
+
+For Qwen3, replace the model and add the matching 1K profile:
+
+```text
+--embedding-model qwen3-embedding:0.6b
+--embedding-profile C:/path/to/mcp-dict-semantic/qwen3-1k-profile.json
+```
+
+Add `--require-semantic` if the server should fail startup instead of falling back to lexical when
+Ollama or the index is unavailable. Omit all semantic arguments for a purely lexical client.
+
 **Claude Code** — user scope, then verify:
 
 ```powershell
 claude mcp add --scope user chinese-medicine-dictionary -- `
   "C:/path/to/mcp-chinese-dict-search.exe" `
   --data "C:/path/to/mcp-dict-data" `
-  --pages-dir "C:/path/to/mcp-dict-pages"
+  --pages-dir "C:/path/to/mcp-dict-pages" `
+  --cache-dir "C:/path/to/mcp-dict-semantic" `
+  --embedding-model embeddinggemma:latest `
+  --ollama-url "http://127.0.0.1:11434"
 claude mcp list
 ```
 
@@ -89,7 +111,10 @@ equivalent user entry is the top-level `mcpServers` object in `~/.claude.json`:
       "command": "C:/path/to/mcp-chinese-dict-search.exe",
       "args": [
         "--data", "C:/path/to/mcp-dict-data",
-        "--pages-dir", "C:/path/to/mcp-dict-pages"
+        "--pages-dir", "C:/path/to/mcp-dict-pages",
+        "--cache-dir", "C:/path/to/mcp-dict-semantic",
+        "--embedding-model", "embeddinggemma:latest",
+        "--ollama-url", "http://127.0.0.1:11434"
       ]
     }
   }
@@ -109,7 +134,10 @@ equivalent user entry is the top-level `mcpServers` object in `~/.claude.json`:
         "command": [
           "C:/path/to/mcp-chinese-dict-search.exe",
           "--data", "C:/path/to/mcp-dict-data",
-          "--pages-dir", "C:/path/to/mcp-dict-pages"
+          "--pages-dir", "C:/path/to/mcp-dict-pages",
+          "--cache-dir", "C:/path/to/mcp-dict-semantic",
+          "--embedding-model", "embeddinggemma:latest",
+          "--ollama-url", "http://127.0.0.1:11434"
         ]
       }
     }
@@ -121,7 +149,12 @@ The CLI writes the same entry; `--global` selects the global configuration:
 
 ```powershell
 opencode mcp add chinese-medicine-dictionary -- `
-  "C:/path/to/mcp-chinese-dict-search.exe" --data "C:/path/to/mcp-dict-data"
+  "C:/path/to/mcp-chinese-dict-search.exe" `
+  --data "C:/path/to/mcp-dict-data" `
+  --pages-dir "C:/path/to/mcp-dict-pages" `
+  --cache-dir "C:/path/to/mcp-dict-semantic" `
+  --embedding-model embeddinggemma:latest `
+  --ollama-url "http://127.0.0.1:11434"
 opencode mcp list
 ```
 
@@ -145,6 +178,12 @@ instead of `mcp.servers`.
           - 'C:/path/to/mcp-dict-data'
           - --pages-dir
           - 'C:/path/to/mcp-dict-pages'
+          - --cache-dir
+          - 'C:/path/to/mcp-dict-semantic'
+          - --embedding-model
+          - embeddinggemma:latest
+          - --ollama-url
+          - 'http://127.0.0.1:11434'
 ```
 
 The tools register as `mcp__chinese-medicine-dictionary__search_dictionary`,
@@ -161,7 +200,13 @@ To make citations and suggestions clickable, add a page directory to the argumen
 without spaces, because VS Code's terminal link detection stops at a space:
 
 ```json
-"args": ["--data", "C:/mcp-dict-data", "--pages-dir", "C:/mcp-dict-pages"]
+"args": [
+  "--data", "C:/mcp-dict-data",
+  "--pages-dir", "C:/mcp-dict-pages",
+  "--cache-dir", "C:/path/to/mcp-dict-semantic",
+  "--embedding-model", "embeddinggemma:latest",
+  "--ollama-url", "http://127.0.0.1:11434"
+]
 ```
 
 Every `get_entry` then writes a page for the entry and names it in the result with
@@ -176,12 +221,20 @@ If your client supports environment-based configuration, this is equivalent:
     "chinese-medicine-dictionary": {
       "command": "C:/path/to/mcp-chinese-dict-search.exe",
       "env": {
-        "MCP_CHINESE_DICT_DATA": "C:/path/to/dictionary.zip"
+        "MCP_CHINESE_DICT_DATA": "C:/path/to/dictionary.zip",
+        "MCP_CHINESE_DICT_PAGES_DIR": "C:/path/to/mcp-dict-pages",
+        "MCP_CHINESE_DICT_CACHE_DIR": "C:/path/to/mcp-dict-semantic",
+        "MCP_CHINESE_DICT_EMBEDDING_MODEL": "embeddinggemma:latest",
+        "MCP_CHINESE_DICT_OLLAMA_URL": "http://127.0.0.1:11434"
       }
     }
   }
 }
 ```
+
+For Qwen3, add
+`"MCP_CHINESE_DICT_EMBEDDING_PROFILE": "C:/path/to/qwen3-1k-profile.json"`.
+For strict startup, add `"MCP_CHINESE_DICT_REQUIRE_SEMANTIC": "1"`.
 
 ## Tools
 
@@ -257,14 +310,19 @@ ollama pull embeddinggemma:latest
 
 # Inspect the model, digest, dimensions, and index status. This never writes.
 .\mcp-chinese-dict-search.exe --data "C:\path\to\mcp-dict-data" `
+  --cache-dir "C:\path\to\mcp-dict-semantic" `
   --embedding-model embeddinggemma:latest --check-semantic
 
 # Build the index. The path is digest-keyed; an older index is retained.
 .\mcp-chinese-dict-search.exe --data "C:\path\to\mcp-dict-data" `
+  --cache-dir "C:\path\to\mcp-dict-semantic" `
   --embedding-model embeddinggemma:latest --build-semantic-index
 ```
 
-Then add `--embedding-model embeddinggemma:latest` to the client arguments and restart the server.
+Then add `--cache-dir "C:\path\to\mcp-dict-semantic"`,
+`--embedding-model embeddinggemma:latest`, and
+`--ollama-url http://127.0.0.1:11434` to the client arguments and restart the server. For Qwen3,
+also add `--embedding-profile` pointing at the same profile used to build its index.
 Only loopback Ollama is accepted (`127.0.0.1`, `localhost`, `::1`); Ollama Cloud and remote hosts
 are rejected. The default behavior if Ollama or the index is unavailable is lexical fallback with
 a warning; add `--require-semantic` to fail startup instead. On a local 30-query English/mixed

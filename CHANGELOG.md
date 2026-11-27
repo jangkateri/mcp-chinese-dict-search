@@ -70,6 +70,9 @@ fixes point-combination parsing, point-ID matching, and hybrid fusion latency.
   lookup cache and the semantic index.
 - Documentation now covers semantic setup, evaluation, model comparison,
   index copying, rollback, pruning, and the default/minimal build split.
+- `dist/INSTALL.md` now gives complete semantic arguments for Claude Code, OpenCode,
+  and DeepSeek Harness: `--cache-dir`, `--embedding-model`, `--ollama-url`, and the
+  Qwen3 `--embedding-profile`, plus the matching environment variables.
 
 ### Fixed
 
