@@ -131,6 +131,7 @@ mod tests {
         let index = SemanticIndex::build(
             IndexMetadata {
                 package_version: "0.5.0".to_owned(),
+                document_version: crate::semantic::DOCUMENT_VERSION,
                 dictionary_fingerprint: dictionary.content_fingerprint().to_owned(),
                 model_name: "topic".to_owned(),
                 model_digest: "invented".to_owned(),

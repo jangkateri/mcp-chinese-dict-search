@@ -1,6 +1,6 @@
 # mcp-chinese-dict-search — Windows x64 installation
 
-**Version:** 0.6.0
+**Version:** 0.6.1
 
 This bundle contains the MCP stdio server for a local Markdown dictionary. It does **not** contain
 dictionary data. You supply your own `.zip` archive (or the extracted Markdown directory) in the
@@ -346,10 +346,11 @@ Do not copy the index or model weights into this repository or `dist/`.
 
 ### Copying a prebuilt index to another PC
 
-The `.bin` index is portable. Copy it instead of rebuilding only when the server version, the
-dictionary file names and content, the Ollama model name and full digest, and the embedding profile
-all match. The target still needs the same model to embed queries; the index replaces only the
-document-embedding pass.
+The `.bin` index is portable. Copy it instead of rebuilding only when the index format and
+document-construction version, the dictionary file names and content, the Ollama model name and
+full digest, and the embedding profile all match. The package version is diagnostic only and does
+not need to match. The target still needs the same model to embed queries; the index replaces only
+the document-embedding pass.
 
 On the source machine:
 

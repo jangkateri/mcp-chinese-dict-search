@@ -465,6 +465,7 @@ and exactly one commit is made after review. Nothing is pushed unless the user a
 | 2026-11-27 | Semantic made a default Cargo feature at the user's request; runtime still opt-in via `--embedding-model`; `--no-default-features` gives the minimal lexical-only build; `dist` rebuilt semantic-capable | Default and minimal gates; shipped-bundle semantic probe |
 | 2026-11-27 | Appendix queries need an explicit `scope`; scoped lexical is strong and semantic fusion is mixed, so no source-aware server policy was changed without further evidence | 17-query point/formula probe via the scoped evaluation CLI |
 | 2026-11-27 | Scope-filtered semantic candidates and conservative appendix fusion implemented; scoped hybrid recall@5 0.765 vs lexical 0.706, with no scoped lexical regressions; Rust `evaluate-semantic` replaces the Python evaluator | 17-query probe, main 30-query set, regression set, default/minimal gates |
+| 2026-11-27 | Semantic index compatibility is data/model/document-driven, not package-version-driven; 0.6.0 indexes remain valid under 0.6.1 | Existing Qwen3 index `status: active` under 0.6.1; package-version test |
 | 2026-11-27 | Semantic inference runs in `spawn_blocking`; digest re-check every 300 s; a changed digest disables semantic for the process | S2.7, S2.8 tests |
 | 2026-11-27 | `--prune-semantic-index` lists by default and deletes only with `--yes` | S3.3 test |
 | 2026-11-27 | Exactly one model/index active; no runtime multi-model routing or vector fusion | Avoid 3× embeddings, incompatible score spaces, and multi-GB memory |
@@ -752,3 +753,20 @@ and exactly one commit is made after review. Nothing is pushed unless the user a
 - Removed the remaining legacy Python analysis scripts and the `tools/` directory; the evaluator
   documentation now lives in the main README. Git history before `1f54ede` preserves the scripts.
 - No tag, push, or release.
+
+### 2026-11-27 — v0.6.1: decouple index compatibility from package version
+
+- Added `DOCUMENT_VERSION` (currently 1) to the index header and expectation, with a serde default
+  of 1 so indexes written by 0.6.0 remain readable. Bump it only when semantic document text or
+  ordering changes.
+- Removed package-version equality from `validate_expectation`; the package version remains in the
+  header for diagnostics. Dictionary fingerprint, model name/digest, dimensions, profile hash,
+  format version, and document version still gate compatibility.
+- Existing Qwen3 1K index (7,042 records, 1,024 dimensions) reports `status: active` under the
+  0.6.1 binary without rebuilding. A package-version mismatch unit test now expects acceptance;
+  document-version and other mismatches still require a rebuild.
+- Version 0.6.1 bundle: `mcp-chinese-dict-search-0.6.1-windows-x64.zip`, 2,092,839 bytes, SHA-256
+  `6dbf1c6f7a4775e453cf4e7a92573d3aa9a344b8a95b755e57fede84f7905359`.
+- Gates: default 176 unit + 2 evaluator + 31 integration; minimal 120 unit + 29 integration;
+  clippy clean in both; fmt clean.
+- Published tag and release `v0.6.1`. No other pending release work.

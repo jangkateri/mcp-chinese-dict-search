@@ -133,7 +133,7 @@ fn load_engine_inner(
     let index = SemanticIndex::load(&path)?;
     let dimensions = client.dimensions(options.model, &profile)?;
     index.validate_expectation(&IndexExpectation {
-        package_version: env!("CARGO_PKG_VERSION").to_owned(),
+        document_version: super::DOCUMENT_VERSION,
         dictionary_fingerprint: dictionary.content_fingerprint().to_owned(),
         model_name: options.model.to_owned(),
         model_digest: tag.digest.clone(),
@@ -274,7 +274,7 @@ pub fn check(
         Ok(dimensions) => {
             lines.push(format!("model dimensions: {dimensions}"));
             match index.validate_expectation(&IndexExpectation {
-                package_version: env!("CARGO_PKG_VERSION").to_owned(),
+                document_version: super::DOCUMENT_VERSION,
                 dictionary_fingerprint: dictionary.content_fingerprint().to_owned(),
                 model_name: model.to_owned(),
                 model_digest: tag.digest.clone(),

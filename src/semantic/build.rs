@@ -84,6 +84,7 @@ pub fn build_index(
     }
     let metadata = IndexMetadata {
         package_version: env!("CARGO_PKG_VERSION").to_owned(),
+        document_version: super::DOCUMENT_VERSION,
         dictionary_fingerprint: dictionary.content_fingerprint().to_owned(),
         model_name: model_name.to_owned(),
         model_digest: model_digest.to_owned(),
@@ -187,7 +188,7 @@ mod tests {
         result
             .index
             .validate_expectation(&IndexExpectation {
-                package_version: env!("CARGO_PKG_VERSION").to_owned(),
+                document_version: crate::semantic::DOCUMENT_VERSION,
                 dictionary_fingerprint: String::new(),
                 model_name: "fake".to_owned(),
                 model_digest: "digest".to_owned(),

@@ -3,6 +3,37 @@
 All notable changes to this project are documented here. The project follows
 [Semantic Versioning](https://semver.org/).
 
+## [0.6.1] — 2026-11-27
+
+### Changed
+
+- **Semantic index compatibility is data/model-driven, not release-driven.** The package
+  version is now informational only and no longer invalidates an index. Validation uses the
+  dictionary content fingerprint, model name, model digest, dimensions, embedding profile hash,
+  index format version, and a new document-construction version.
+- Added `DOCUMENT_VERSION` to the index header and expectation. It is `1` for existing indexes;
+  bump it only when the semantic document text or ordering changes. Existing 0.6.0 indexes load
+  under 0.6.1 without regeneration.
+- `dist/INSTALL.md` now gives complete semantic client arguments for Claude Code, OpenCode, and
+  DeepSeek Harness: `--cache-dir`, `--embedding-model`, `--ollama-url`, the Qwen3
+  `--embedding-profile`, and matching environment variables.
+
+### Fixed
+
+- A normal release or documentation-only patch no longer marks a valid semantic index stale.
+  Users no longer need to spend hours re-embedding the dictionary after every version change.
+- The 0.6.0 release asset was refreshed with the corrected `INSTALL.md`; the `v0.6.0` tag remains
+  at its original commit.
+
+### Verification
+
+- Existing Qwen3 1K index (7,042 records, 1,024 dimensions, built by 0.6.0) reports
+  `status: active` under the 0.6.1 binary without rebuilding.
+- A package-version mismatch is covered by a unit test and is accepted; a document-version,
+  dictionary, model, digest, dimension, or profile mismatch still fails with a rebuild message.
+- Default tests: 176 library + 2 evaluator + 31 integration; minimal lexical-only tests pass;
+  clippy and fmt clean.
+
 ## [0.6.0] — 2026-11-27
 
 This release adds graph traversal, graph and network images, appendix networks,

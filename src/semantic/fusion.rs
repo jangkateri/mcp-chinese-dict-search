@@ -895,6 +895,7 @@ mod tests {
         let index = SemanticIndex::build(
             IndexMetadata {
                 package_version: "0.5.0".to_owned(),
+                document_version: crate::semantic::DOCUMENT_VERSION,
                 dictionary_fingerprint: "fingerprint".to_owned(),
                 model_name: "fake".to_owned(),
                 model_digest: "0123456789abcdef".to_owned(),
@@ -944,6 +945,7 @@ mod tests {
         let index = SemanticIndex::build(
             IndexMetadata {
                 package_version: "0.5.0".to_owned(),
+                document_version: crate::semantic::DOCUMENT_VERSION,
                 dictionary_fingerprint: "fingerprint".to_owned(),
                 model_name: "fake".to_owned(),
                 model_digest: "0123456789abcdef".to_owned(),
@@ -1068,6 +1070,7 @@ mod tests {
         let index = SemanticIndex::new(
             IndexMetadata {
                 package_version: "0.5.0".to_owned(),
+                document_version: crate::semantic::DOCUMENT_VERSION,
                 dictionary_fingerprint: "fingerprint".to_owned(),
                 model_name: "fake".to_owned(),
                 model_digest: "0123456789abcdef".to_owned(),

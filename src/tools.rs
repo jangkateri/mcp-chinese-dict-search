@@ -1627,6 +1627,7 @@ mod tests {
         let index = SemanticIndex::new(
             IndexMetadata {
                 package_version: env!("CARGO_PKG_VERSION").to_owned(),
+                document_version: crate::semantic::DOCUMENT_VERSION,
                 dictionary_fingerprint: String::new(),
                 model_name: "fake".to_owned(),
                 model_digest: "digest".to_owned(),

@@ -70,7 +70,7 @@ fn a_real_index_loads_and_answers_a_weak_query() {
         .expect("the model probes");
     index
         .validate_expectation(&IndexExpectation {
-            package_version: env!("CARGO_PKG_VERSION").to_owned(),
+            document_version: mcp_chinese_dict_search::semantic::DOCUMENT_VERSION,
             dictionary_fingerprint: dictionary.content_fingerprint().to_owned(),
             model_name: model.clone(),
             model_digest: tag.digest.clone(),

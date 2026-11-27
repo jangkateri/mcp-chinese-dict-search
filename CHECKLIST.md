@@ -5,10 +5,10 @@ it records.**
 
 | Field | Value |
 |---|---|
-| Project version | 0.6.0 |
+| Project version | 0.6.1 |
 | Plan | [`PLAN.md`](PLAN.md) |
 | Last updated | 2026-11-27 |
-| Overall status | Working tree 0.6.0: graph traversal, graph PNGs, appendix networks, and gated semantic retrieval (default feature; runtime opt-in); v0.5.0 remains the last release |
+| Overall status | Working tree 0.6.1: graph traversal, graph PNGs, appendix networks, and gated semantic retrieval (default feature; runtime opt-in); v0.6.0 is the last release |
 
 ## Status legend
 
@@ -1135,6 +1135,24 @@ Append newest entries at the bottom. Include date, task, command/evidence, and r
   notes. `main` is `fd9d578`; the `v0.6.0` tag remains at `752e38f`.
 - No version bump: the package version is part of the semantic index identity, so a 0.6.1 release
   would invalidate existing indexes. This is a documentation-only asset refresh.
+
+### 2026-11-27 — v0.6.1 release: index compatibility decoupled from release version
+
+- Semantic index validation no longer compares the package version. It uses the dictionary content
+  fingerprint, model name, model digest, dimensions, embedding profile hash, index format version,
+  and a new `DOCUMENT_VERSION` (1 for existing indexes).
+- Existing Qwen3 1K index (7,042 records, 1,024 dimensions, built by 0.6.0) reports
+  `status: active` under the 0.6.1 binary without rebuilding.
+- Package-version mismatch is accepted; document-version, dictionary, model, digest, dimension,
+  and profile mismatches still fail with a rebuild message.
+- Windows asset: `mcp-chinese-dict-search-0.6.1-windows-x64.zip`, 2,092,839 bytes, SHA-256
+  `6dbf1c6f7a4775e453cf4e7a92573d3aa9a344b8a95b755e57fede84f7905359`. It contains the server,
+  `evaluate-semantic.exe`, `INSTALL.md`, `install.ps1`, the config example, `LICENSE`,
+  `SHA256SUMS.txt`, and `CHANGELOG.md`.
+- Published tag and GitHub release: `v0.6.1`,
+  https://github.com/jangkateri/mcp-chinese-dict-search/releases/tag/v0.6.1.
+- Gates: default 176 unit + 2 evaluator + 31 integration; minimal 120 unit + 29 integration;
+  clippy clean in both; fmt clean; dist checksums verify.
 
 ---
 

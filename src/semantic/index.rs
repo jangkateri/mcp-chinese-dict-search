@@ -20,7 +20,9 @@ const NORM_TOLERANCE: f32 = 0.02;
 /// The identity and dimensions an index was built with.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IndexMetadata {
+    /// Informational only; not part of index compatibility.
     pub package_version: String,
+    pub document_version: u32,
     pub dictionary_fingerprint: String,
     pub model_name: String,
     pub model_digest: String,
@@ -31,7 +33,7 @@ pub struct IndexMetadata {
 /// The identity a serving process expects an index to have.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct IndexExpectation {
-    pub package_version: String,
+    pub document_version: u32,
     pub dictionary_fingerprint: String,
     pub model_name: String,
     pub model_digest: String,
@@ -63,12 +65,19 @@ pub struct SemanticIndex {
 #[derive(Debug, Serialize, Deserialize)]
 struct HeaderJson {
     package_version: String,
+    /// Missing in indexes written before 0.6.1; those were document version 1.
+    #[serde(default = "default_document_version")]
+    document_version: u32,
     dictionary_fingerprint: String,
     model_name: String,
     model_digest: String,
     dimensions: u32,
     count: u32,
     profile_hash: String,
+}
+
+fn default_document_version() -> u32 {
+    1
 }
 
 impl SemanticIndex {
@@ -142,15 +151,10 @@ impl SemanticIndex {
         Ok(())
     }
 
-    /// Reject an index built for another package, source, model, or profile.
+    /// Reject an index built for another source, model, document version, or profile.
     pub fn validate_expectation(&self, expected: &IndexExpectation) -> Result<(), String> {
         let actual = &self.metadata;
         for (name, actual, expected) in [
-            (
-                "package version",
-                actual.package_version.as_str(),
-                expected.package_version.as_str(),
-            ),
             (
                 "dictionary fingerprint",
                 actual.dictionary_fingerprint.as_str(),
@@ -178,6 +182,13 @@ impl SemanticIndex {
                      the semantic index"
                 ));
             }
+        }
+        if self.metadata.document_version != expected.document_version {
+            return Err(format!(
+                "the index document version is {}, but this server expects {}; rebuild the \
+                 semantic index",
+                self.metadata.document_version, expected.document_version
+            ));
         }
         if self.metadata.dimensions != expected.dimensions {
             return Err(format!(
@@ -276,6 +287,7 @@ impl SemanticIndex {
         self.validate()?;
         let header = HeaderJson {
             package_version: self.metadata.package_version.clone(),
+            document_version: self.metadata.document_version,
             dictionary_fingerprint: self.metadata.dictionary_fingerprint.clone(),
             model_name: self.metadata.model_name.clone(),
             model_digest: self.metadata.model_digest.clone(),
@@ -393,6 +405,7 @@ impl SemanticIndex {
         Self::new(
             IndexMetadata {
                 package_version: header.package_version,
+                document_version: header.document_version,
                 dictionary_fingerprint: header.dictionary_fingerprint,
                 model_name: header.model_name,
                 model_digest: header.model_digest,
@@ -643,11 +656,13 @@ impl<'a> Cursor<'a> {
 mod tests {
     use super::*;
     use crate::dictionary::LookupRef;
+    use crate::semantic::DOCUMENT_VERSION;
     use std::path::Path;
 
     fn metadata(dimensions: usize) -> IndexMetadata {
         IndexMetadata {
             package_version: "0.5.0".to_owned(),
+            document_version: DOCUMENT_VERSION,
             dictionary_fingerprint: "fingerprint".to_owned(),
             model_name: "test-model".to_owned(),
             model_digest: "sha256:0123456789abcdef".to_owned(),
@@ -841,7 +856,7 @@ mod tests {
 
     fn expectation() -> IndexExpectation {
         IndexExpectation {
-            package_version: "0.5.0".to_owned(),
+            document_version: DOCUMENT_VERSION,
             dictionary_fingerprint: "fingerprint".to_owned(),
             model_name: "test-model".to_owned(),
             model_digest: "sha256:0123456789abcdef".to_owned(),
@@ -880,7 +895,7 @@ mod tests {
                 expected.profile_hash = "other".to_owned();
             },
             |expected: &mut IndexExpectation| {
-                expected.package_version = "9.9.9".to_owned();
+                expected.document_version = DOCUMENT_VERSION + 1;
             },
         ];
         for mutate in mutations {
@@ -889,6 +904,13 @@ mod tests {
             let error = index.validate_expectation(&expected).unwrap_err();
             assert!(error.contains("rebuild"));
         }
+    }
+
+    #[test]
+    fn package_version_is_diagnostic_only() {
+        let index = sample();
+        assert_ne!(index.metadata.package_version, env!("CARGO_PKG_VERSION"));
+        assert!(index.validate_expectation(&expectation()).is_ok());
     }
 
     #[test]

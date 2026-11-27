@@ -2,8 +2,8 @@
 
 | Field | Value |
 |---|---|
-| Status | Working tree 0.6.0: graph traversal, graph PNGs, appendix networks, and gated semantic retrieval as a default feature; dictionary-agnostic title, required `--data`, generic text; v0.5.0 is the last release |
-| Version | 0.6.0 |
+| Status | Working tree 0.6.1: graph traversal, graph PNGs, appendix networks, and gated semantic retrieval as a default feature; dictionary-agnostic title, required `--data`, generic text; v0.6.0 is the last release |
+| Version | 0.6.1 |
 | Last updated | 2026-11-27 |
 | Source specification | `PROJECT-SETUP-PROMPT.md` |
 | Tracking document | [`CHECKLIST.md`](CHECKLIST.md) |

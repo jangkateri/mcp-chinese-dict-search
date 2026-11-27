@@ -629,7 +629,8 @@ does.
 The semantic index is a single portable `.bin` file. Copying it avoids the expensive document
 embedding pass; it is valid only when all of the following match on both machines:
 
-- the same server version (the index header records the package version);
+- the same index format and document-construction version (both recorded in the header; the
+  package version is diagnostic only and does not need to match);
 - the same dictionary source files (the fingerprint hashes file names and content, not absolute
   paths);
 - the same Ollama model name and full digest;

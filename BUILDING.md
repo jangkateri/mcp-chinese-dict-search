@@ -208,7 +208,7 @@ Never copy the dictionary archive, extracted Markdown, images, an EPUB, or any c
 ## Linux/macOS bundle
 
 ```sh
-VERSION=0.6.0
+VERSION=0.6.1
 TARGET=x86_64-unknown-linux-musl
 PLATFORM=linux-x64
 BUNDLE="dist/$PLATFORM"

@@ -4,6 +4,13 @@
 //! meridian appendix entries, medicinal appendix entries, formula appendix
 //! entries, and weights sections. The order is part of the index contract.
 
+/// Version of the semantic document text and ordering.
+///
+/// Bump this only when document construction changes in a way that would make
+/// old vectors incompatible. It is independent of the package version, so a
+/// normal release or patch does not force a rebuild.
+pub const DOCUMENT_VERSION: u32 = 1;
+
 use crate::dictionary::parse::plain_text;
 use crate::dictionary::{Dictionary, LookupRef, Source};
 

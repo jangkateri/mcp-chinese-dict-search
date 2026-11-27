@@ -30,7 +30,7 @@ pub const SEMANTIC_TOP_K: usize = 20;
 pub const MIN_SIMILARITY: f32 = 0.30;
 
 pub use build::{BuildResult, DEFAULT_BATCH_SIZE, build_index};
-pub use document::{DocumentProfile, SemanticDocument, build_documents};
+pub use document::{DOCUMENT_VERSION, DocumentProfile, SemanticDocument, build_documents};
 pub use embedder::{Embedder, FakeEmbedder};
 pub use engine::SemanticEngine;
 pub use fusion::{
