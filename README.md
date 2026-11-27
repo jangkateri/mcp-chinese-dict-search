@@ -683,6 +683,14 @@ MRR (0.429 vs 0.455) and top-1 (0.30 vs 0.40), with a 5.6× longer build (76 vs 
 larger index (27.5 vs 20.7 MiB). EmbeddingGemma remains the default for this CPU; Qwen3 is the
 recall-first or Chinese-heavy alternative.
 
+For appendix-specific queries, set `scope` to `meridian`, `medicinal`, `formulas`, or `weights`.
+The semantic gate uses the best lexical score within the requested scope; with the default `all`,
+unrelated main-dictionary body matches can exceed 300 and close the gate before embedding runs. A
+scoped 17-query point/formula probe found lexical recall@5 0.706 versus hybrid 0.588, although
+hybrid had slightly better MRR and top-1. Scoped lexical retrieval is already strong for appendix
+entries; semantic fusion is query-dependent and can demote correct scoped hits, so evaluate per
+source before relying on it.
+
 ## Architecture
 
 The crate is split into a library (`src/lib.rs`) and a thin binary (`src/main.rs`):

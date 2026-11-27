@@ -27,9 +27,17 @@ A local JSON array. Do not commit it when it is derived from the dictionary.
 ```json
 [
   {"query": "breathing that is quick and shallow", "expected": "shortness of breath"},
-  {"query": "a fluttering or pounding heartbeat", "expected": "heart palpitation"}
+  {"query": "a fluttering or pounding heartbeat", "expected": "heart palpitation"},
+  {"query": "a point on the inner wrist used for nausea and vomiting", "expected": "Inner Pass", "scope": "meridian"},
+  {"query": "a formula for wind-cold with sweating and aversion to wind", "expected": "Cinnamon Twig Decoction", "scope": "formulas"}
 ]
 ```
+
+`scope` is optional and defaults to `all`. Use `meridian` for point queries, `formulas`
+for formula monographs, `medicinal` for herbs, and `weights` for measures. The scope
+restricts the lexical candidates and therefore the semantic gate. With the default `all`,
+unrelated main-dictionary body matches can exceed the 300-point gate and prevent embedding
+from running at all.
 
 ### Examples
 
@@ -90,6 +98,20 @@ With `--per-query`, one JSON object containing both modes:
 `matched_in: "body"` on a hybrid hit means the entry was present in both the
 lexical and semantic candidate lists; semantic fusion improved its rank. A hit
 found only by the vector search is labelled `semantic` with a score of 200–299.
+
+### Scoped appendix retrieval
+
+A scoped 17-query probe (nine point and eight formula paraphrases) produced:
+
+| Mode | Recall@5 | MRR | Top-1 |
+|---|---:|---:|---:|
+| Scoped lexical | **0.706** | 0.510 | 0.412 |
+| Scoped hybrid (Qwen3 1K) | 0.588 | **0.520** | **0.471** |
+
+Semantic fusion helped individual point paraphrases such as `Inner Pass` and `Supreme
+Surge`, but demoted several correct scoped lexical hits. In this corpus, scoped lexical
+retrieval is already strong for appendix entries; semantic fusion is query-dependent and
+must be evaluated per source. The probe is local and not committed.
 
 ### Deploying the tool
 

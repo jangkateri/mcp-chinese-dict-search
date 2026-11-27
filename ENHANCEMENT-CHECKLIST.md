@@ -463,6 +463,7 @@ and exactly one commit is made after review. Nothing is pushed unless the user a
 | 2026-11-27 | `embeddinggemma:latest` (2K, 768 dims) used for the real S4 evaluation; Qwen3 measured ~0.86 s/doc batched at 1K vs ~0.16 s/doc for EmbeddingGemma on this CPU | Batched local benchmarks; S4.7 |
 | 2026-11-27 | Qwen3 1K compared: higher recall@5 (0.633 vs 0.567) but lower MRR (0.429 vs 0.455), lower top-1 (0.30 vs 0.40), 5.6× longer build, and larger index/RSS; EmbeddingGemma remains the default | Real 30-query evaluation, regression set, and RSS measurement |
 | 2026-11-27 | Semantic made a default Cargo feature at the user's request; runtime still opt-in via `--embedding-model`; `--no-default-features` gives the minimal lexical-only build; `dist` rebuilt semantic-capable | Default and minimal gates; shipped-bundle semantic probe |
+| 2026-11-27 | Appendix queries need an explicit `scope`; scoped lexical is strong and semantic fusion is mixed, so no source-aware server policy was changed without further evidence | 17-query point/formula probe via the scoped evaluation CLI |
 | 2026-11-27 | Semantic inference runs in `spawn_blocking`; digest re-check every 300 s; a changed digest disables semantic for the process | S2.7, S2.8 tests |
 | 2026-11-27 | `--prune-semantic-index` lists by default and deletes only with `--yes` | S3.3 test |
 | 2026-11-27 | Exactly one model/index active; no runtime multi-model routing or vector fusion | Avoid 3× embeddings, incompatible score spaces, and multi-GB memory |
@@ -731,4 +732,11 @@ and exactly one commit is made after review. Nothing is pushed unless the user a
 - Gates: default 170 unit + 31 integration; minimal 120 unit + 29 integration; clippy clean in
   both; fmt clean. `cargo tree` shows `ureq` by default and zero `ureq` with
   `--no-default-features`.
+- Added optional per-query `scope` to `tools/evaluate_semantic.py`. A 17-query point/formula
+  probe with `scope: meridian`/`formulas` found scoped lexical recall@5 **0.706** / MRR 0.510 /
+  top-1 0.412 versus hybrid **0.588** / 0.520 / 0.471. Semantic fusion helped some point
+  paraphrases (`Inner Pass`, `Supreme Surge`) but demoted correct scoped hits, so scoped lexical
+  remains the safer default for appendix queries. The unfiltered `scope: all` path often closes
+  the 300-point gate on unrelated main-dictionary body matches; the tool and README now document
+  this.
 - No tag, push, or release.

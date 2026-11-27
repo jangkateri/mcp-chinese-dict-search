@@ -155,12 +155,13 @@ def run_mode(
         for index, item in enumerate(queries):
             result: dict | None = None
             elapsed = 0.0
+            scope = item.get("scope", "all")
             for repeat in range(args.repeat):
                 result, elapsed = call(
                     process,
                     index + 2 + repeat * len(queries),
                     "search_dictionary",
-                    {"query": item["query"], "limit": args.limit},
+                    {"query": item["query"], "limit": args.limit, "scope": scope},
                 )
                 latencies.append(elapsed)
             assert result is not None
@@ -181,6 +182,7 @@ def run_mode(
                 {
                     "query": item["query"],
                     "expected": expected,
+                    "scope": scope,
                     "rank": rank,
                     "matched_in": matched_in,
                     "score": score,
@@ -208,6 +210,7 @@ def load_queries(path: Path, parser: argparse.ArgumentParser) -> list[dict]:
         parser.error(f"cannot read {path}: {error}")
     if not isinstance(queries, list) or not queries:
         parser.error("the query file must contain a non-empty JSON array")
+    scopes = {"all", "dictionary", "meridian", "medicinal", "formulas", "weights"}
     for index, item in enumerate(queries):
         if (
             not isinstance(item, dict)
@@ -219,10 +222,18 @@ def load_queries(path: Path, parser: argparse.ArgumentParser) -> list[dict]:
             parser.error(
                 f"query {index + 1} must have non-empty string 'query' and 'expected'"
             )
+        scope = item.get("scope", "all")
+        if not isinstance(scope, str) or scope not in scopes:
+            parser.error(
+                f"query {index + 1} has invalid scope {scope!r}; "
+                f"expected one of {sorted(scopes)}"
+            )
     return queries
 
 
 def main() -> int:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--exe", type=Path, required=True)
     parser.add_argument("--data", type=Path, required=True)
