@@ -460,6 +460,7 @@ and exactly one commit is made after review. Nothing is pushed unless the user a
 | 2026-11-27 | Use local Ollama `/api/embed`; Cloud unsupported | Plan D7, D8; S0 |
 | 2026-11-27 | `embeddinggemma:latest` selected as the CPU-friendly reference primary; `qwen3-embedding:0.6b` Chinese-heavy option; `bge-m3` long-entry challenger | S0 quality checks; S4 batched CPU timing |
 | 2026-11-27 | `embeddinggemma:latest` (2K, 768 dims) used for the real S4 evaluation; Qwen3 measured ~0.86 s/doc batched at 1K vs ~0.16 s/doc for EmbeddingGemma on this CPU | Batched local benchmarks; S4.7 |
+| 2026-11-27 | Qwen3 1K compared: higher recall@5 (0.633 vs 0.567) but lower MRR (0.429 vs 0.455), lower top-1 (0.30 vs 0.40), 5.6× longer build, and larger index/RSS; EmbeddingGemma remains the default | Real 30-query evaluation, regression set, and RSS measurement |
 | 2026-11-27 | Semantic inference runs in `spawn_blocking`; digest re-check every 300 s; a changed digest disables semantic for the process | S2.7, S2.8 tests |
 | 2026-11-27 | `--prune-semantic-index` lists by default and deletes only with `--yes` | S3.3 test |
 | 2026-11-27 | Exactly one model/index active; no runtime multi-model routing or vector fusion | Avoid 3× embeddings, incompatible score spaces, and multi-GB memory |
@@ -695,3 +696,21 @@ and exactly one commit is made after review. Nothing is pushed unless the user a
   `semantic_real` returned 5 hits and passed.
 - Release commit `e611d42`: 49 files, 12,456 insertions. No tag, push, or release.
 - No further commit made except this tracker close-out.
+
+### 2026-11-27 — Qwen3 1K real evaluation and comparison
+
+- Built the Qwen3 index with the 1K profile override: 7,042 records, 1,024 dimensions,
+  28,879,512 bytes (27.54 MiB), 4,572,432 ms (76.2 min), status active.
+- 30-query English/mixed set, three repeats: Qwen3 hybrid recall@5 **0.6333**, MRR **0.4289**,
+  top-1 **0.3000**, p50 175.2 ms, p95 208.8 ms; same-run lexical p95 92.7 ms, so added p95
+  **116.1 ms**.
+- Regression set: lexical and hybrid both 1.0 recall@5/MRR/top-1, zero top-1 changes.
+- Qwen3 MCP working set 76.39 MB versus 47.93 MB lexical (**+28.46 MB**); model 639 MB + index
+  27.54 MiB.
+- Compared with EmbeddingGemma: Qwen3 gains 6.7 recall@5 points but loses 2.6 MRR points and
+  10 top-1 points; its build is 5.6× longer and its index/RSS are larger. Qwen3 was evaluated at
+  1K, not its 4K default, so this is the practical CPU configuration rather than Qwen3's best.
+- Decision: keep **EmbeddingGemma** as the default and installed model. Qwen3 remains a supported
+  alternative for Chinese-heavy or recall-first use; its digest-keyed index is retained for
+  rollback and comparison.
+- No tag, push, or release.

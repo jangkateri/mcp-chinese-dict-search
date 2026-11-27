@@ -671,6 +671,11 @@ by 21 MB. The exact/pinyin/Chinese regression set stayed at top-1 1.0, because t
 the gate before embedding. These are measurements on one corpus and one query set, not a general
 quality claim.
 
+A Qwen3 evaluation at the practical 1K override found higher recall@5 (0.633 vs 0.567) but lower
+MRR (0.429 vs 0.455) and top-1 (0.30 vs 0.40), with a 5.6× longer build (76 vs 14 minutes) and a
+larger index (27.5 vs 20.7 MiB). EmbeddingGemma remains the default for this CPU; Qwen3 is the
+recall-first or Chinese-heavy alternative.
+
 ## Architecture
 
 The crate is split into a library (`src/lib.rs`) and a thin binary (`src/main.rs`):

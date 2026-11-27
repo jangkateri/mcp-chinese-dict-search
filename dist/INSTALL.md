@@ -267,7 +267,10 @@ are rejected. The default behavior if Ollama or the index is unavailable is lexi
 a warning; add `--require-semantic` to fail startup instead. On a local 30-query English/mixed
 set, hybrid recall@5 was 0.567 versus 0.233 lexical and MRR 0.455 versus 0.183, with 75 ms added
 p95; the exact/pinyin/Chinese regression set was unchanged. The index is about 21 MB and the model
-about 621 MB. These are local measurements, not a general quality claim.
+about 621 MB. These are local measurements, not a general quality claim. A Qwen3 evaluation at a
+1K context override found higher recall@5 (0.633 vs 0.567) but lower MRR (0.429 vs 0.455) and
+top-1 (0.30 vs 0.40), with a 5.6× longer build and a 27.5 MiB index; EmbeddingGemma remains the
+default for this CPU.
 
 The index is tied to the model name **and digest**. After `ollama pull` changes a tag:
 
