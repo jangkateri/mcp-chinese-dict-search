@@ -7,7 +7,7 @@ Live tracker for [`ENHANCEMENT-PLAN.md`](ENHANCEMENT-PLAN.md).
 | Base | `0.5.0`, commit `dd684f2` |
 | Plan | [`ENHANCEMENT-PLAN.md`](ENHANCEMENT-PLAN.md) |
 | Last updated | 2026-11-27 |
-| Overall status | Graph, PNG, and semantic S0–S4 complete; release packaging and final gates in progress |
+| Overall status | All phases complete; release commit `e611d42`; no push made |
 | Commit rule | **Do not commit until every phase is complete and verified.** One commit at the end; do not push unless asked. |
 | Network rule | No remote network. Semantic mode may call only loopback Ollama; Ollama Cloud is excluded. |
 
@@ -49,8 +49,8 @@ Live tracker for [`ENHANCEMENT-PLAN.md`](ENHANCEMENT-PLAN.md).
 | S2 | Ollama embedder, index, CLI | 12 | 12 | Complete |
 | S3 | Model lifecycle and migration | 9 | 9 | Complete |
 | S4 | Evaluation and acceptance decision | 8 | 8 | Complete |
-| D | Docs, gates, bundle, one commit | 12 | 11 | In progress |
-| **Total** | | **113** | **112** | **In progress** |
+| D | Docs, gates, bundle, one commit | 12 | 12 | Complete |
+| **Total** | | **113** | **113** | **Complete** |
 
 ---
 
@@ -443,8 +443,8 @@ and exactly one commit is made after review. Nothing is pushed unless the user a
   is accounted for. Reviewed `git diff --stat`, `git diff --check`, the final search/fusion code,
   the ignore/feature/config diffs, and the docs surfaces; default and feature schema-contract,
   snapshot, e2e, and CLI tests pass.
-- [ ] D12 Make **one** commit after all gates pass. Do not amend, tag, push, or release unless the
-  user asks.
+- [x] D12 Make **one** commit after all gates pass. Do not amend, tag, push, or release unless the
+  user asks. Release commit `e611d42` (49 files, 12,456 insertions); no tag, push, or release.
 
 ---
 
@@ -693,4 +693,5 @@ and exactly one commit is made after review. Nothing is pushed unless the user a
   index identity. Rebuilt under 0.6.0 with the unused Ollama models unloaded: 7,042 records,
   768 dimensions, 21,668,504 bytes, 761 s. `--check-semantic` reports `status: active`;
   `semantic_real` returned 5 hits and passed.
-- No commit made.
+- Release commit `e611d42`: 49 files, 12,456 insertions. No tag, push, or release.
+- No further commit made except this tracker close-out.
