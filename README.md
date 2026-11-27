@@ -754,7 +754,6 @@ mcp-chinese-dict-search/
 │   ├── support/mod.rs
 │   ├── support/fixture.rs       # invented corpus, written at test time
 │   ├── stdio_contract.rs / tools_e2e.rs / real_data.rs / dist_bundle.rs
-├── tools/                       # evaluation documentation; legacy Python scripts removed
 ├── dist/                        # Windows x64 deployment bundle
 ├── PLAN.md / CHECKLIST.md / CLAUDE.md
 ├── Cargo.toml / Cargo.lock / rustfmt.toml
@@ -778,21 +777,53 @@ The default tests need no network or model. `tests/real_data.rs` checks the conf
 `tests/semantic_real.rs` skip with a reason unless the Ollama environment variables are set; the
 fixture suite is hermetic.
 
-`evaluate-semantic` is a Rust binary that loads the dictionary and semantic index directly and
-reports lexical and hybrid recall@5, MRR, top-1, and p50/p95 latency for a local JSON query set.
-It supports `--embedding-profile`, `--mode`, per-query scopes, and `--per-query`; see
-[`tools/README.md`](tools/README.md). Keep a query set derived from the dictionary out of git:
+`evaluate-semantic` is the Rust offline evaluator; see [Offline evaluation](#offline-evaluation).
+
+## Offline evaluation
+
+`evaluate-semantic` loads the dictionary and semantic index directly. It does not start the MCP
+server and does not require Python.
 
 ```sh
 cargo build --release --bin evaluate-semantic
-
-./target/release/evaluate-semantic \
-  --data "C:/ProgramData/mcp-dict-data" \
-  --cache-dir "C:/ProgramData/mcp-dict-semantic" \
-  --queries "C:/ProgramData/mcp-dict-semantic/queries.json" \
-  --embedding-model embeddinggemma:latest \
-  --per-query
 ```
+
+The query file is a local JSON array. Keep it out of git when it is derived from the dictionary.
+
+```json
+[
+  {"query": "breathing that is quick and shallow", "expected": "shortness of breath"},
+  {"query": "a point on the inner wrist used for nausea and vomiting", "expected": "Inner Pass", "scope": "meridian"},
+  {"query": "a formula for wind-cold with sweating and aversion to wind", "expected": "Cinnamon Twig Decoction", "scope": "formulas"}
+]
+```
+
+`scope` is optional and defaults to `all`. Use `meridian` for point queries, `medicinal` for herbs,
+`formulas` for formula monographs, and `weights` for measures. The scope restricts both the lexical
+candidates and the semantic gate; with `all`, unrelated main-dictionary body matches can exceed 300
+and close the gate before embedding runs.
+
+```powershell
+.\target\release\evaluate-semantic.exe `
+  --data C:/ProgramData/mcp-dict-data `
+  --cache-dir C:/ProgramData/mcp-dict-semantic `
+  --queries C:/ProgramData/mcp-dict-semantic/queries.json `
+  --embedding-model qwen3-embedding:0.6b `
+  --embedding-profile C:/ProgramData/mcp-dict-semantic/profile.json `
+  --per-query `
+  --repeat 3
+```
+
+Options include `--mode both|lexical|hybrid`, `--limit` (1–20), `--repeat`, `--semantic-index`,
+`--ollama-url`, and `--embedding-profile`. Without `--per-query`, the output is one JSON object with
+lexical and hybrid recall@5, MRR, top-1, and p50/p95 latency. With `--per-query`, each mode also
+reports the expected term's rank, `matched_in`, score, top term and score, gate state, embedding
+time, semantic candidate count, and fallback reason.
+
+For appendix scopes, semantic candidates are scope-filtered and conservative fusion pins the
+lexical head and reserves one semantic slot; `all` and `dictionary` keep aggressive RRF. The
+measured comparison is in [Semantic retrieval](#semantic-retrieval). Copy the executable and a
+local query file to another machine to deploy the evaluator; no Python installation is required.
 
 ## Known limitations
 

@@ -66,8 +66,9 @@ The server must let a model:
 
 ## 3. Verified source-data facts
 
-These facts were measured from the archive on 2026-11-24 with the read-only scripts in `tools/`
-(see §17). They drive the parser and test design; they are not assumptions.
+These facts were measured from the archive on 2026-11-24 with one-time read-only analysis scripts.
+Those scripts were removed after verification and remain in git history before commit `1f54ede`.
+They drive the parser and test design; they are not assumptions.
 
 ### 3.1 Files
 
@@ -1125,8 +1126,6 @@ mcp-chinese-dict-search/
 ├── LICENSE                     # MIT (code only)
 ├── .gitignore                  # target/, archive, logs, local data
 ├── dictionary.zip            # user-supplied; never committed
-├── tools/                      # evaluation documentation
-│   └── README.md               # Rust evaluate-semantic usage and policy notes
 ├── src/
 │   ├── main.rs                 # thin executable entry point
 │   ├── lib.rs                  # public module map

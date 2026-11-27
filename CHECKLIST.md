@@ -1079,9 +1079,8 @@ Append newest entries at the bottom. Include date, task, command/evidence, and r
 - Rebuilt `dist` semantic-capable: 3,103,744 bytes, SHA-256
   `ca4a7a04b3bb5b26b48bebd829d94da452578dd3f8765dffe28e73d0b38e3736`. The shipped bundle validated
   the Qwen3 index (`status: active`) and answered the two semantic probes at rank 1.
-- Consolidated the evaluation/diagnostic code into `tools/evaluate_semantic.py`, adding
-  `--embedding-profile`, `--mode`, and `--per-query`; added `tools/README.md`; removed the local
-  diagnostic scripts.
+- Consolidated the evaluation/diagnostic code into an evaluation CLI; it was later replaced by the
+  Rust `evaluate-semantic` binary (see below), and the local diagnostic scripts were removed.
 - Gates: default 170 unit + 31 integration; minimal 120 unit + 29 integration; clippy clean in
   both configurations; fmt clean.
 - No push, tag, or release.

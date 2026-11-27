@@ -183,7 +183,7 @@ cargo build --release --bin evaluate-semantic
 
 It reads a local query JSON file, loads the dictionary and semantic index
 directly, and reports lexical versus hybrid metrics. See
-[`tools/README.md`](tools/README.md).
+[`README.md` § Offline evaluation](README.md#offline-evaluation).
 
 ## Windows bundle
 

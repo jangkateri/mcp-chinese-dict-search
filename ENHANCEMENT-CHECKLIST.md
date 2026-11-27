@@ -727,9 +727,9 @@ and exactly one commit is made after review. Nothing is pushed unless the user a
 - Rebuilt `dist/mcp-chinese-dict-search.exe`: 3,103,744 bytes, SHA-256
   `ca4a7a04b3bb5b26b48bebd829d94da452578dd3f8765dffe28e73d0b38e3736`. The bundle validated the
   Qwen3 profile/index (`status: active`) and answered both semantic probes at rank 1.
-- Consolidated the local diagnostics into `tools/evaluate_semantic.py` with
-  `--embedding-profile`, `--mode`, and `--per-query`; added `tools/README.md`; removed the
-  temporary diagnostic scripts.
+- Consolidated the local diagnostics into an evaluation CLI with `--embedding-profile`, `--mode`,
+  and `--per-query`; it was later replaced by the Rust `evaluate-semantic` binary, and the
+  temporary diagnostic scripts were removed.
 - Gates: default 170 unit + 31 integration; minimal 120 unit + 29 integration; clippy clean in
   both; fmt clean. `cargo tree` shows `ureq` by default and zero `ureq` with
   `--no-default-features`.
@@ -749,6 +749,6 @@ and exactly one commit is made after review. Nothing is pushed unless the user a
 - Replaced the Python evaluator with the Rust `evaluate-semantic` binary; `dist/` now ships it, and
   the Windows installer copies it. Gates: default 175 unit + 2 evaluator + 31 integration; minimal
   120 unit + 29 integration; clippy clean in both; fmt clean.
-- Removed the remaining legacy Python analysis scripts from `tools/`; the directory now contains
-  only evaluator documentation. Git history before `1f54ede` preserves the scripts.
+- Removed the remaining legacy Python analysis scripts and the `tools/` directory; the evaluator
+  documentation now lives in the main README. Git history before `1f54ede` preserves the scripts.
 - No tag, push, or release.
