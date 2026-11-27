@@ -685,11 +685,13 @@ recall-first or Chinese-heavy alternative.
 
 For appendix-specific queries, set `scope` to `meridian`, `medicinal`, `formulas`, or `weights`.
 The semantic gate uses the best lexical score within the requested scope; with the default `all`,
-unrelated main-dictionary body matches can exceed 300 and close the gate before embedding runs. A
-scoped 17-query point/formula probe found lexical recall@5 0.706 versus hybrid 0.588, although
-hybrid had slightly better MRR and top-1. Scoped lexical retrieval is already strong for appendix
-entries; semantic fusion is query-dependent and can demote correct scoped hits, so evaluate per
-source before relying on it.
+unrelated main-dictionary body matches can exceed 300 and close the gate before embedding runs.
+Semantic candidates are also filtered to the requested scope. For appendix scopes the fusion is
+conservative: the lexical head is pinned and one slot is reserved for the best remaining semantic
+candidate. A scoped 17-query point/formula probe gave lexical recall@5 0.706 / MRR 0.510 / top-1
+0.412 and conservative hybrid 0.765 / 0.522 / 0.412; the earlier aggressive fusion scored 0.588
+recall and demoted correct scoped hits. Main-dictionary symptom queries keep the aggressive RRF
+behavior, where it is a clear gain.
 
 ## Architecture
 
@@ -743,14 +745,16 @@ mcp-chinese-dict-search/
 │       ├── index.rs / appendix.rs / search.rs / pinyin.rs / lookup.rs
 │       ├── graph.rs
 │       └── network.rs            # formulas, medicinals, point combinations
-│   └── semantic/                 # default semantic feature; inert until configured
-│       ├── document.rs / embedder.rs / index.rs / fusion.rs
-│       ├── profiles.rs / ollama.rs / build.rs / engine.rs / startup.rs
+│   ├── semantic/                 # default semantic feature; inert until configured
+│   │   ├── document.rs / embedder.rs / index.rs / fusion.rs
+│   │   ├── profiles.rs / ollama.rs / build.rs / engine.rs / startup.rs
+│   └── bin/
+│       └── evaluate_semantic.rs  # offline lexical/hybrid evaluation binary
 ├── tests/
 │   ├── support/mod.rs
 │   ├── support/fixture.rs       # invented corpus, written at test time
 │   ├── stdio_contract.rs / tools_e2e.rs / real_data.rs / dist_bundle.rs
-├── tools/                       # read-only analysis and local evaluation scripts
+├── tools/                       # legacy Python analysis scripts; not deployed
 ├── dist/                        # Windows x64 deployment bundle
 ├── PLAN.md / CHECKLIST.md / CLAUDE.md
 ├── Cargo.toml / Cargo.lock / rustfmt.toml
@@ -774,18 +778,20 @@ The default tests need no network or model. `tests/real_data.rs` checks the conf
 `tests/semantic_real.rs` skip with a reason unless the Ollama environment variables are set; the
 fixture suite is hermetic.
 
-`tools/evaluate_semantic.py` drives the stdio server and reports lexical and hybrid recall@5, MRR,
-top-1, and p50/p95 latency for a local JSON query set. It supports `--embedding-profile`,
-`--mode`, and `--per-query`; see [`tools/README.md`](tools/README.md). Keep a query set derived from
-the dictionary out of git; pass it by path:
+`evaluate-semantic` is a Rust binary that loads the dictionary and semantic index directly and
+reports lexical and hybrid recall@5, MRR, top-1, and p50/p95 latency for a local JSON query set.
+It supports `--embedding-profile`, `--mode`, per-query scopes, and `--per-query`; see
+[`tools/README.md`](tools/README.md). Keep a query set derived from the dictionary out of git:
 
 ```sh
-python -I tools/evaluate_semantic.py \
-  --exe target/release/mcp-chinese-dict-search.exe \
+cargo build --release --bin evaluate-semantic
+
+./target/release/evaluate-semantic \
   --data "C:/ProgramData/mcp-dict-data" \
   --cache-dir "C:/ProgramData/mcp-dict-semantic" \
   --queries "C:/ProgramData/mcp-dict-semantic/queries.json" \
-  --embedding-model embeddinggemma:latest
+  --embedding-model embeddinggemma:latest \
+  --per-query
 ```
 
 ## Known limitations

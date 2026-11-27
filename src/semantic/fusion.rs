@@ -1,12 +1,13 @@
 //! Lexical gating, reciprocal-rank fusion, and semantic hit construction.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::dictionary::normalize::contains_han;
 use crate::dictionary::pinyin;
 use crate::dictionary::search::{first_paragraphs, search_all};
 use crate::dictionary::{
-    AppendixRef, Dictionary, LookupRef, MatchKind, SearchHit, SearchRequest, SearchResponse, Source,
+    AppendixRef, Dictionary, LookupRef, MatchKind, Scope, SearchHit, SearchRequest, SearchResponse,
+    Source,
 };
 use crate::error::DictionaryError;
 
@@ -81,7 +82,17 @@ pub fn search_hybrid_traced(
     };
     trace.embedding_ms = started.elapsed().as_millis();
 
-    let semantic = match index.search(&query_vector, options.top_k, options.min_similarity) {
+    let semantic = if request.scope == Scope::All {
+        index.search(&query_vector, options.top_k, options.min_similarity)
+    } else {
+        index.search_scoped(
+            &query_vector,
+            options.top_k,
+            options.min_similarity,
+            request.scope,
+        )
+    };
+    let semantic = match semantic {
         Ok(semantic) => semantic,
         Err(error) => {
             lexical.hits.truncate(request.limit);
@@ -96,7 +107,12 @@ pub fn search_hybrid_traced(
         return Ok((lexical, trace));
     }
 
-    Ok((fuse(dictionary, lexical, &semantic, request.limit), trace))
+    let response = if is_appendix_scope(request.scope) {
+        fuse_conservative(dictionary, lexical, &semantic, request.limit)
+    } else {
+        fuse(dictionary, lexical, &semantic, request.limit)
+    };
+    Ok((response, trace))
 }
 
 /// True when the lexical gate is open and the query is not pure pinyin.
@@ -239,6 +255,117 @@ pub fn fuse(
         hits,
         total,
         suggestions: lexical.suggestions,
+    }
+}
+
+fn is_appendix_scope(scope: Scope) -> bool {
+    matches!(
+        scope,
+        Scope::Meridian | Scope::Medicinal | Scope::Formulas | Scope::Weights
+    )
+}
+
+/// Keep the lexical head, then let semantic candidates fill the last slot.
+///
+/// Appendix entries are short and structured; scoped lexical ranking is
+/// already strong. Reserving one slot for semantic retrieval prevents the
+/// fusion from demoting correct lexical hits while still allowing a semantic
+/// discovery to enter the response.
+fn fuse_conservative(
+    dictionary: &Dictionary,
+    lexical: SearchResponse,
+    semantic: &[SemanticMatch],
+    limit: usize,
+) -> SearchResponse {
+    let SearchResponse {
+        query,
+        scope,
+        hits: mut lexical_hits,
+        total: lexical_total,
+        suggestions,
+    } = lexical;
+    let resolver = HitResolver::new(dictionary);
+    let lexical_refs: HashSet<LookupRef> = lexical_hits
+        .iter()
+        .filter_map(|hit| resolver.reference_for_hit(hit))
+        .collect();
+    let semantic_only_count = semantic
+        .iter()
+        .filter(|candidate| !lexical_refs.contains(&candidate.reference))
+        .count();
+
+    let mut lexical_ranks: HashMap<LookupRef, usize> = HashMap::new();
+    for (rank, hit) in lexical_hits.iter().enumerate() {
+        if let Some(reference) = resolver.reference_for_hit(hit) {
+            lexical_ranks.entry(reference).or_insert(rank + 1);
+        }
+    }
+
+    let pin = if limit == 0 {
+        0
+    } else {
+        limit.saturating_sub(1).max(1)
+    }
+    .min(lexical_hits.len());
+    let remaining = lexical_hits.split_off(pin);
+    let mut hits = lexical_hits;
+    let mut used: HashSet<LookupRef> = hits
+        .iter()
+        .filter_map(|hit| resolver.reference_for_hit(hit))
+        .collect();
+
+    if hits.len() < limit {
+        let mut best: Option<(f64, f32, LookupRef)> = None;
+        for (semantic_rank, candidate) in semantic.iter().enumerate() {
+            if used.contains(&candidate.reference) {
+                continue;
+            }
+            let lexical = lexical_ranks
+                .get(&candidate.reference)
+                .map(|rank| 1.0 / (RRF_K + *rank as f64))
+                .unwrap_or(0.0);
+            let semantic_score = 1.0 / (RRF_K + semantic_rank as f64 + 1.0);
+            let score = lexical + semantic_score;
+            let better = best.is_none_or(|(best_score, best_similarity, best_reference)| {
+                score
+                    .total_cmp(&best_score)
+                    .then_with(|| candidate.similarity.total_cmp(&best_similarity))
+                    .then_with(|| {
+                        lookup_order(best_reference).cmp(&lookup_order(candidate.reference))
+                    })
+                    .is_gt()
+            });
+            if better {
+                best = Some((score, candidate.similarity, candidate.reference));
+            }
+        }
+        if let Some((_, similarity, reference)) = best
+            && let Some(hit) = semantic_hit(dictionary, reference, semantic_score(similarity))
+        {
+            used.insert(reference);
+            hits.push(hit);
+        }
+    }
+
+    for hit in remaining {
+        if hits.len() >= limit {
+            break;
+        }
+        if let Some(reference) = resolver.reference_for_hit(&hit) {
+            if used.contains(&reference) {
+                continue;
+            }
+            used.insert(reference);
+        }
+        hits.push(hit);
+    }
+
+    SearchResponse {
+        query,
+        scope,
+        hits,
+        total: lexical_total + semantic_only_count,
+        suggestions,
     }
 }
 
@@ -842,6 +969,96 @@ mod tests {
         .unwrap();
         assert_eq!(embedder.query_calls(), 0);
         assert_eq!(response.hits[0].matched_in, MatchKind::Headword);
+    }
+
+    #[test]
+    fn appendix_scopes_use_the_conservative_policy() {
+        assert!(is_appendix_scope(Scope::Meridian));
+        assert!(is_appendix_scope(Scope::Medicinal));
+        assert!(is_appendix_scope(Scope::Formulas));
+        assert!(is_appendix_scope(Scope::Weights));
+        assert!(!is_appendix_scope(Scope::All));
+        assert!(!is_appendix_scope(Scope::Dictionary));
+    }
+
+    #[test]
+    fn conservative_fusion_keeps_the_lexical_head_and_adds_one_semantic_tail() {
+        let mut dictionary = dictionary();
+        dictionary
+            .entries
+            .push(entry("delta", 4, "A made-up fourth entry."));
+        dictionary
+            .entries
+            .push(entry("epsilon", 5, "A made-up fifth entry."));
+        let lexical = lexical(
+            vec![
+                hit(Source::Dictionary, "alpha", 1, 100),
+                hit(Source::Dictionary, "beta", 2, 90),
+                hit(Source::Dictionary, "gamma", 3, 80),
+                hit(Source::Dictionary, "delta", 4, 70),
+            ],
+            4,
+        );
+        let response = fuse_conservative(
+            &dictionary,
+            lexical,
+            &[SemanticMatch {
+                reference: reference(Source::Dictionary, 4),
+                similarity: 0.9,
+            }],
+            5,
+        );
+        let terms: Vec<&str> = response.hits.iter().map(|hit| hit.term.as_str()).collect();
+        assert_eq!(terms, vec!["alpha", "beta", "gamma", "delta", "epsilon"]);
+        assert_eq!(response.hits[4].matched_in, MatchKind::Semantic);
+        assert_eq!(response.total, 5);
+    }
+
+    #[test]
+    fn conservative_fusion_does_not_demote_a_lexical_hit_already_in_the_head() {
+        let dictionary = dictionary();
+        let lexical = lexical(
+            vec![
+                hit(Source::Dictionary, "alpha", 1, 100),
+                hit(Source::Dictionary, "beta", 2, 90),
+                hit(Source::Dictionary, "gamma", 3, 80),
+            ],
+            3,
+        );
+        let response = fuse_conservative(
+            &dictionary,
+            lexical,
+            &[SemanticMatch {
+                reference: reference(Source::Dictionary, 0),
+                similarity: 0.99,
+            }],
+            5,
+        );
+        assert_eq!(response.hits.len(), 3);
+        assert_eq!(response.hits[0].term, "alpha");
+        assert_eq!(response.total, 3);
+    }
+
+    #[test]
+    fn conservative_fusion_reserves_no_semantic_slot_at_limit_one() {
+        let dictionary = dictionary();
+        let response = fuse_conservative(
+            &dictionary,
+            lexical(
+                vec![
+                    hit(Source::Dictionary, "alpha", 1, 100),
+                    hit(Source::Dictionary, "beta", 2, 90),
+                ],
+                2,
+            ),
+            &[SemanticMatch {
+                reference: reference(Source::Dictionary, 2),
+                similarity: 0.99,
+            }],
+            1,
+        );
+        assert_eq!(response.hits.len(), 1);
+        assert_eq!(response.hits[0].term, "alpha");
     }
 
     #[test]

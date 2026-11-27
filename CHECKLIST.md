@@ -1086,6 +1086,26 @@ Append newest entries at the bottom. Include date, task, command/evidence, and r
   both configurations; fmt clean.
 - No push, tag, or release.
 
+### 2026-11-27 — Scope-filtered appendix policy and Rust evaluator
+
+- Semantic candidates are now filtered by the requested `scope` before top-k selection
+  (`SemanticIndex::search_scoped`). Appendix scopes use conservative fusion: the lexical head is
+  pinned and one slot is reserved for the best remaining semantic candidate by RRF. `All` and
+  `Dictionary` keep the aggressive RRF behavior.
+- Scoped 17-query point/formula probe: lexical 0.706 recall@5 / 0.510 MRR / 0.412 top-1;
+  conservative hybrid **0.765 / 0.522 / 0.412**. The previous aggressive hybrid was 0.588 /
+  0.520 / 0.471 and demoted correct scoped hits. `Inner Pass` entered at rank 5.
+- Main 30-query Qwen3 set unchanged (0.6333 / 0.4289 / 0.3); regression set 1.0 across all
+  metrics.
+- Replaced the Python evaluation script with the Rust `evaluate-semantic` binary; `dist/` now
+  contains `evaluate-semantic.exe` (1,803,264 bytes, SHA-256
+  `11b0517b0ea913358c1c154ea44a8aa5b9192de101f3da46607428d526fb72f1`) and the policy-enabled
+  server binary (3,110,400 bytes, SHA-256
+  `cb5ef22f2e2907c70b3637eca0b35b0982dcfa8d5a0d118e19448b70320e7fa5`). The installer copies both.
+- Gates: default 175 unit + 2 evaluator + 31 integration; minimal 120 unit + 29 integration;
+  clippy clean in both; fmt clean.
+- No push, tag, or release.
+
 ---
 
 ## Completed external input

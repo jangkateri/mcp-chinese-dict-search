@@ -173,6 +173,18 @@ cargo test --all-targets --no-default-features
 Check the dependency set with `cargo tree` (default contains `ureq`) and
 `cargo tree --no-default-features` (no `ureq`).
 
+## Offline evaluation binary
+
+The evaluation tool is a Rust binary, not a Python script:
+
+```sh
+cargo build --release --bin evaluate-semantic
+```
+
+It reads a local query JSON file, loads the dictionary and semantic index
+directly, and reports lexical versus hybrid metrics. See
+[`tools/README.md`](tools/README.md).
+
 ## Windows bundle
 
 `dist/` is a self-contained Windows x64 bundle. Refresh it after a release build:
@@ -180,11 +192,12 @@ Check the dependency set with `cargo tree` (default contains `ureq`) and
 ```powershell
 $Bundle = "dist"
 Copy-Item "target\release\mcp-chinese-dict-search.exe" $Bundle -Force
+Copy-Item "target\release\evaluate-semantic.exe" $Bundle -Force
 Copy-Item LICENSE, dist\INSTALL.md, dist\install.ps1, dist\mcp-config.example.json $Bundle -Force
 
-Get-FileHash "$Bundle\mcp-chinese-dict-search.exe", "$Bundle\install.ps1", `
-  "$Bundle\INSTALL.md", "$Bundle\mcp-config.example.json", "$Bundle\LICENSE" `
-  -Algorithm SHA256 |
+Get-FileHash "$Bundle\mcp-chinese-dict-search.exe", "$Bundle\evaluate-semantic.exe", `
+  "$Bundle\install.ps1", "$Bundle\INSTALL.md", "$Bundle\mcp-config.example.json", `
+  "$Bundle\LICENSE" -Algorithm SHA256 |
   ForEach-Object { "$($_.Hash.ToLower())  $(Split-Path -Leaf $_.Path)" } |
   Set-Content "$Bundle\SHA256SUMS.txt"
 ```

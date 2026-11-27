@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use crate::dictionary::{LookupRef, Source};
+use crate::dictionary::{LookupRef, Scope, Source};
 
 pub const MAGIC: [u8; 8] = *b"MCDSEM01";
 pub const FORMAT_VERSION: u32 = 1;
@@ -196,6 +196,33 @@ impl SemanticIndex {
         limit: usize,
         min_similarity: f32,
     ) -> Result<Vec<SemanticMatch>, String> {
+        self.search_filtered(query, limit, min_similarity, |_| true)
+    }
+
+    /// Search only records whose source is allowed by `scope`.
+    ///
+    /// Filtering happens before top-k selection, so a scoped query returns the
+    /// best candidates from that source rather than whatever remains of a
+    /// global top-k list.
+    pub fn search_scoped(
+        &self,
+        query: &[f32],
+        limit: usize,
+        min_similarity: f32,
+        scope: Scope,
+    ) -> Result<Vec<SemanticMatch>, String> {
+        self.search_filtered(query, limit, min_similarity, |reference| {
+            scope.allows(reference.source)
+        })
+    }
+
+    fn search_filtered(
+        &self,
+        query: &[f32],
+        limit: usize,
+        min_similarity: f32,
+        allowed: impl Fn(LookupRef) -> bool,
+    ) -> Result<Vec<SemanticMatch>, String> {
         if query.len() != self.metadata.dimensions {
             return Err(format!(
                 "query has {} dimensions but the index has {}",
@@ -218,6 +245,7 @@ impl SemanticIndex {
         let mut matches: Vec<SemanticMatch> = self
             .records
             .iter()
+            .filter(|record| allowed(record.reference))
             .filter_map(|record| {
                 let dot = record
                     .vector
@@ -667,6 +695,22 @@ mod tests {
         assert_eq!(matches.len(), 1);
         assert_eq!(matches[0].similarity, 1.0);
         assert_eq!(index.search(&unit(&[1.0, 0.0]), 1, 0.0).unwrap().len(), 1);
+    }
+
+    #[test]
+    fn scoped_search_filters_records_before_top_k() {
+        let index = sample();
+        let matches = index
+            .search_scoped(&unit(&[1.0, 0.0]), 10, 0.0, Scope::Medicinal)
+            .unwrap();
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].reference.source, Source::Medicinal);
+        assert!(
+            index
+                .search_scoped(&unit(&[1.0, 0.0]), 10, 0.0, Scope::Meridian)
+                .unwrap()
+                .is_empty()
+        );
     }
 
     #[test]

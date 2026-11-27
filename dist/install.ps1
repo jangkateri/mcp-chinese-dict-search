@@ -13,6 +13,10 @@ if (-not (Test-Path -LiteralPath $SourceExe)) {
 
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
 Copy-Item -LiteralPath $SourceExe -Destination $InstallDir -Force
+$SourceEval = Join-Path $Here "evaluate-semantic.exe"
+if (Test-Path -LiteralPath $SourceEval) {
+    Copy-Item -LiteralPath $SourceEval -Destination $InstallDir -Force
+}
 $License = Join-Path $Here "LICENSE"
 if (Test-Path -LiteralPath $License) {
     Copy-Item -LiteralPath $License -Destination $InstallDir -Force

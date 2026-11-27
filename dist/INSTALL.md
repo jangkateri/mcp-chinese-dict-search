@@ -319,6 +319,24 @@ On the target machine:
 
 Do not commit the index or place it in `dist/`; it is derived data and is ignored by git.
 
+## Offline evaluation
+
+The bundle includes `evaluate-semantic.exe`, a Rust evaluator that loads the dictionary and
+semantic index directly. It does not start the MCP server and does not require Python.
+
+```powershell
+.\evaluate-semantic.exe --data "C:\path\to\mcp-dict-data" `
+  --cache-dir "C:\path\to\semantic-cache" `
+  --queries "C:\path\to\queries.json" `
+  --embedding-model embeddinggemma:latest `
+  --per-query --repeat 3
+```
+
+The query file is a local JSON array of objects with `query`, `expected`, and optional `scope`
+(`all`, `dictionary`, `meridian`, `medicinal`, `formulas`, `weights`). Keep a query file derived
+from the dictionary out of git. `--mode lexical` runs without Ollama; omit `--embedding-model`
+for a lexical-only baseline.
+
 ## Data path
 
 `--data` (or `MCP_CHINESE_DICT_DATA`) is required; the server does not guess a filename. Use an

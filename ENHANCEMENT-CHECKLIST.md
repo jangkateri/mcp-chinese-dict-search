@@ -464,6 +464,7 @@ and exactly one commit is made after review. Nothing is pushed unless the user a
 | 2026-11-27 | Qwen3 1K compared: higher recall@5 (0.633 vs 0.567) but lower MRR (0.429 vs 0.455), lower top-1 (0.30 vs 0.40), 5.6× longer build, and larger index/RSS; EmbeddingGemma remains the default | Real 30-query evaluation, regression set, and RSS measurement |
 | 2026-11-27 | Semantic made a default Cargo feature at the user's request; runtime still opt-in via `--embedding-model`; `--no-default-features` gives the minimal lexical-only build; `dist` rebuilt semantic-capable | Default and minimal gates; shipped-bundle semantic probe |
 | 2026-11-27 | Appendix queries need an explicit `scope`; scoped lexical is strong and semantic fusion is mixed, so no source-aware server policy was changed without further evidence | 17-query point/formula probe via the scoped evaluation CLI |
+| 2026-11-27 | Scope-filtered semantic candidates and conservative appendix fusion implemented; scoped hybrid recall@5 0.765 vs lexical 0.706, with no scoped lexical regressions; Rust `evaluate-semantic` replaces the Python evaluator | 17-query probe, main 30-query set, regression set, default/minimal gates |
 | 2026-11-27 | Semantic inference runs in `spawn_blocking`; digest re-check every 300 s; a changed digest disables semantic for the process | S2.7, S2.8 tests |
 | 2026-11-27 | `--prune-semantic-index` lists by default and deletes only with `--yes` | S3.3 test |
 | 2026-11-27 | Exactly one model/index active; no runtime multi-model routing or vector fusion | Avoid 3× embeddings, incompatible score spaces, and multi-GB memory |
@@ -732,11 +733,20 @@ and exactly one commit is made after review. Nothing is pushed unless the user a
 - Gates: default 170 unit + 31 integration; minimal 120 unit + 29 integration; clippy clean in
   both; fmt clean. `cargo tree` shows `ureq` by default and zero `ureq` with
   `--no-default-features`.
-- Added optional per-query `scope` to `tools/evaluate_semantic.py`. A 17-query point/formula
-  probe with `scope: meridian`/`formulas` found scoped lexical recall@5 **0.706** / MRR 0.510 /
-  top-1 0.412 versus hybrid **0.588** / 0.520 / 0.471. Semantic fusion helped some point
-  paraphrases (`Inner Pass`, `Supreme Surge`) but demoted correct scoped hits, so scoped lexical
-  remains the safer default for appendix queries. The unfiltered `scope: all` path often closes
-  the 300-point gate on unrelated main-dictionary body matches; the tool and README now document
-  this.
+- Added optional per-query `scope` to the evaluation tool. A 17-query point/formula probe with
+  `scope: meridian`/`formulas` found scoped lexical recall@5 **0.706** / MRR 0.510 / top-1 0.412
+  versus aggressive hybrid **0.588** / 0.520 / 0.471. Semantic fusion helped some point paraphrases
+  (`Inner Pass`, `Supreme Surge`) but demoted correct scoped hits. The unfiltered `scope: all` path
+  often closes the 300-point gate on unrelated main-dictionary body matches; the tool and README
+  document this.
+- Implemented scope-filtered semantic candidates (`SemanticIndex::search_scoped`) and a conservative
+  appendix policy: pin the lexical head, reserve one slot for the best remaining semantic candidate
+  by RRF. Scoped hybrid then reached **0.765** recall@5 / 0.522 MRR / 0.412 top-1, with no scoped
+  lexical regressions; `Inner Pass` entered at rank 5. `Scope::All` and `Scope::Dictionary` keep
+  the aggressive RRF behavior.
+- Verified the main 30-query Qwen3 set unchanged (0.6333 recall@5 / 0.4289 MRR / 0.3 top-1) and the
+  regression set at 1.0 across all metrics.
+- Replaced the Python evaluator with the Rust `evaluate-semantic` binary; `dist/` now ships it, and
+  the Windows installer copies it. Gates: default 175 unit + 2 evaluator + 31 integration; minimal
+  120 unit + 29 integration; clippy clean in both; fmt clean.
 - No tag, push, or release.

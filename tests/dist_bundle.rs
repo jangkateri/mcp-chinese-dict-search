@@ -62,9 +62,14 @@ fn bundle_contains_the_binary_and_checksums() {
         dist.join("mcp-chinese-dict-search.exe").is_file(),
         "dist/ must contain the Windows x64 executable"
     );
+    assert!(
+        dist.join("evaluate-semantic.exe").is_file(),
+        "dist/ must contain the evaluation executable"
+    );
     let sums = include_str!("../dist/SHA256SUMS.txt");
     for file in [
         "mcp-chinese-dict-search.exe",
+        "evaluate-semantic.exe",
         "install.ps1",
         "INSTALL.md",
         "mcp-config.example.json",

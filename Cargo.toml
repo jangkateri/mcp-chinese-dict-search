@@ -12,6 +12,11 @@ categories = ["command-line-utilities"]
 name = "mcp-chinese-dict-search"
 path = "src/main.rs"
 
+[[bin]]
+name = "evaluate-semantic"
+path = "src/bin/evaluate_semantic.rs"
+required-features = ["semantic"]
+
 [features]
 default = ["semantic"]
 semantic = ["dep:ureq"]
