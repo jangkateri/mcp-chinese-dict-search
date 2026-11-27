@@ -913,7 +913,7 @@ Exact lookup stays exact; suggestions are a recovery surface, not a fuzzy match:
 | `--data <path>` | `MCP_CHINESE_DICT_DATA` | required | Zip archive or extracted directory. |
 | `--title <text>` | `MCP_CHINESE_DICT_TITLE` | data path name | Display name used in citations. |
 | `--log-file <path>` | `MCP_CHINESE_DICT_LOG_FILE` | off | Append diagnostics to a file as well as stderr. |
-| `--cache-dir <path>` | `MCP_CHINESE_DICT_CACHE_DIR` | beside the dictionary | Generated lookup-cache directory. |
+| `--cache-dir <path>` | `MCP_CHINESE_DICT_CACHE_DIR` | beside the dictionary | Generated lookup-cache and semantic-index directory. |
 | `--pages-dir <path>` | `MCP_CHINESE_DICT_PAGES_DIR` | off | Write a Markdown page per `get_entry` result and name it in the result for clickable citations. |
 | `--build-indices` | — | off | Rebuild the pinyin and Han indices, write the cache, and exit without serving stdio. |
 | `--build-linked-data <dir>` | — | off | Copy the Markdown set, insert the dropped index anchors, verify entries and links, and exit without serving stdio. |

@@ -88,8 +88,9 @@ Options:
   --log-file <path>    Append diagnostics to this file as well as stderr
                        (env MCP_CHINESE_DICT_LOG_FILE); useful because MCP clients
                        usually hide a stdio server's stderr
-  --cache-dir <path>   Directory for the generated lookup cache (default: beside
-                       the dictionary; env MCP_CHINESE_DICT_CACHE_DIR)
+  --cache-dir <path>   Directory for the generated lookup cache and semantic
+                       index (default: beside the dictionary; env
+                       MCP_CHINESE_DICT_CACHE_DIR)
   --pages-dir <path>   Write a Markdown page per get_entry result into this directory and
                        name it in the result, so the citation can be clicked; choose a
                        path without spaces (env MCP_CHINESE_DICT_PAGES_DIR)

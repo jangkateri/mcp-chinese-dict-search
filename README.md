@@ -542,7 +542,7 @@ nothing; rebuild it after changing the source data. A linked copy also carries a
 | `--data <path>` | `MCP_CHINESE_DICT_DATA` | required | Dictionary `.zip` or extracted directory. |
 | `--title <text>` | `MCP_CHINESE_DICT_TITLE` | derived from the data path | Display name used in citations. |
 | `--log-file <path>` | `MCP_CHINESE_DICT_LOG_FILE` | off | Append diagnostics to a file as well as stderr. |
-| `--cache-dir <path>` | `MCP_CHINESE_DICT_CACHE_DIR` | beside the dictionary | Where to write the generated lookup cache. |
+| `--cache-dir <path>` | `MCP_CHINESE_DICT_CACHE_DIR` | beside the dictionary | Where to write the generated lookup cache and semantic index. |
 | `--pages-dir <path>` | `MCP_CHINESE_DICT_PAGES_DIR` | off | Write a Markdown page per `get_entry` result here and name it in the result, so citations can be clicked. Use a path without spaces. |
 | `--build-indices` | — | off | Rebuild the pinyin and Han lookup indices, write the cache, and exit without serving stdio. |
 | `--build-linked-data <dir>` | — | off | Copy the Markdown set into `<dir>`, insert the index anchors the conversion dropped, verify entries and links, and exit without serving. Point `--data` at the copy. |
@@ -616,6 +616,54 @@ used `embeddinggemma:latest` for that reason.
 `--embedding-profile` can override the prefix, instruction, `min_similarity`, `num_ctx`, and input
 guard. `min_similarity` does not require re-embedding; changing a prefix, instruction, or context
 does.
+
+### Copying a prebuilt index to another PC
+
+The semantic index is a single portable `.bin` file. Copying it avoids the expensive document
+embedding pass; it is valid only when all of the following match on both machines:
+
+- the same server version (the index header records the package version);
+- the same dictionary source files (the fingerprint hashes file names and content, not absolute
+  paths);
+- the same Ollama model name and full digest;
+- the same embedding profile (the built-in default, or the same `--embedding-profile` JSON).
+
+The target still needs the same Ollama model: the index stores document vectors, but every query
+must still be embedded by the model.
+
+On the source machine:
+
+```powershell
+# Shows the model, digest, profile hash, and exact expected index path.
+mcp-chinese-dict-search.exe --data C:/ProgramData/mcp-dict-data `
+  --cache-dir C:/ProgramData/mcp-dict-semantic `
+  --embedding-model embeddinggemma:latest --check-semantic
+
+# Record the checksum of the index you are about to copy.
+Get-ChildItem "C:/ProgramData/mcp-dict-semantic/*.semantic-cache-*.bin" |
+  Get-FileHash -Algorithm SHA256
+```
+
+Copy the `.bin` file, the dictionary data (same file names and content), and, if you used one, the
+`--embedding-profile` JSON. The lookup-cache `.json` is optional; it rebuilds quickly and is not
+required for semantic retrieval.
+
+On the target machine:
+
+1. Install the same server version with the `semantic` feature and pull the model
+   (`ollama pull embeddinggemma:latest`). Verify the model digest matches the source; a changed
+   tag digest invalidates the index.
+2. Put the dictionary data anywhere; keep the file names and content identical.
+3. Put the `.bin` in the cache directory under its original filename, or point
+   `--semantic-index` at it directly.
+4. Run `--check-semantic` with the same model and profile. `status: active` means the copy is
+   valid. If it says `stale`, the remediation names the mismatch; rebuild rather than converting
+   vectors.
+5. Run one weak `search_dictionary` query, then point the MCP client at the target binary with
+   `--cache-dir` (and `--embedding-profile` for a non-default profile).
+
+Do not commit the index or place it in `dist/`; it is derived from the dictionary and is ignored
+by git.
 
 On a local 30-query English/mixed paraphrase set with `embeddinggemma:latest`, hybrid recall@5
 rose from 0.23 to 0.57 and MRR from 0.18 to 0.46; added p95 was 75 ms and the MCP working set grew

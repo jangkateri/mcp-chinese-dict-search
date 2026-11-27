@@ -227,8 +227,9 @@ it while the dictionary content, package version, and cache version match. A cha
 produces a new fingerprint and a new cache; the old file is removed.
 
 Use `--cache-dir <path>` or `MCP_CHINESE_DICT_CACHE_DIR` to keep the cache elsewhere, for example
-when the dictionary is on a read-only volume. The cache is derived from the copyrighted dictionary;
-do not copy it into a public repository or into `dist/`.
+when the dictionary is on a read-only volume. The same directory also holds the semantic index when
+the semantic feature is enabled. The cache is derived from the copyrighted dictionary; do not copy
+it into a public repository or into `dist/`.
 
 To build the indices and write the cache without starting a client, run:
 
@@ -278,6 +279,39 @@ The index is tied to the model name **and digest**. After `ollama pull` changes 
 Never copy vectors between models; embeddings from different digests are not comparable. Keep the
 last known-good model in the Ollama store and its index on disk until a replacement is accepted.
 Do not copy the index or model weights into this repository or `dist/`.
+
+### Copying a prebuilt index to another PC
+
+The `.bin` index is portable. Copy it instead of rebuilding only when the server version, the
+dictionary file names and content, the Ollama model name and full digest, and the embedding profile
+all match. The target still needs the same model to embed queries; the index replaces only the
+document-embedding pass.
+
+On the source machine:
+
+1. Run `--check-semantic` and record the model, digest, profile hash, and expected index path.
+2. Copy the `.bin` file, the dictionary data (same file names and content), and, if used, the
+   `--embedding-profile` JSON. The lookup-cache `.json` is optional; it rebuilds quickly.
+3. Record the index checksum so you can verify the transfer:
+
+   ```powershell
+   Get-ChildItem "C:\path\to\semantic-cache\*.semantic-cache-*.bin" |
+     Get-FileHash -Algorithm SHA256
+   ```
+
+On the target machine:
+
+1. Install the same server version with the semantic feature and run
+   `ollama pull embeddinggemma:latest`. Compare the model digest with the source; a changed tag
+   digest invalidates the index.
+2. Copy the dictionary data and the `.bin` file. Keep the index filename, place it in the cache
+   directory, or point `--semantic-index` at its full path.
+3. Run `--check-semantic` with the same model and profile. `status: active` means the copy is
+   valid; `stale` names the mismatch and requires a rebuild.
+4. Run one weak `search_dictionary` query, then update the client arguments with `--cache-dir`
+   (and `--embedding-profile` for a non-default profile).
+
+Do not commit the index or place it in `dist/`; it is derived data and is ignored by git.
 
 ## Data path
 
