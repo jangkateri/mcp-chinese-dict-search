@@ -44,7 +44,7 @@ jobs:
           path: mcp-chinese-dict-search-*-linux-x64.tar.gz
 
   macos-universal:
-    runs-on: macos-14
+    runs-on: macos-13
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
