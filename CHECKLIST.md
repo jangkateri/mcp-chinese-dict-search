@@ -1123,6 +1123,19 @@ Append newest entries at the bottom. Include date, task, command/evidence, and r
 - Gates: default 175 unit + 2 evaluator + 31 integration; minimal 120 unit + 29 integration;
   clippy clean in both; fmt clean; dist checksums verify.
 
+### 2026-11-27 — v0.6.0 asset documentation correction
+
+- Corrected `dist/INSTALL.md` so Claude Code, OpenCode, and DeepSeek Harness examples include the
+  complete semantic arguments: `--cache-dir`, `--embedding-model`, `--ollama-url`, and the Qwen3
+  `--embedding-profile`; added the corresponding environment variables and strict-startup option.
+- Rebuilt the Windows asset: 2,092,312 bytes, SHA-256
+  `e5ec34df0c3a6f9868ae50ec0c8c3256a9bef73285e6bce3d5ad38f222083703`. The server and evaluator
+  binaries are unchanged.
+- Refreshed the `v0.6.0` release asset with `gh release upload --clobber` and updated the release
+  notes. `main` is `fd9d578`; the `v0.6.0` tag remains at `752e38f`.
+- No version bump: the package version is part of the semantic index identity, so a 0.6.1 release
+  would invalidate existing indexes. This is a documentation-only asset refresh.
+
 ---
 
 ## Completed external input
