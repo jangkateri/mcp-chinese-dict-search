@@ -96,59 +96,24 @@ cross build --release --target aarch64-unknown-linux-gnu
 Docker Desktop or Docker Engine must be running. From Windows without `cross`, use WSL and the
 Linux native instructions.
 
-## CI matrix
+## Platform release workflow
 
-```yaml
-name: build-binaries
-on:
-  workflow_dispatch:
-  push:
-    tags: ["v*"]
+`.github/workflows/release-platforms.yml` builds the non-Windows distributions on native
+GitHub-hosted runners:
 
-jobs:
-  build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            artifact: mcp-chinese-dict-search.exe
-            bundle: windows-x64
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-musl
-            artifact: mcp-chinese-dict-search
-            bundle: linux-x64
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            artifact: mcp-chinese-dict-search
-            bundle: macos-arm64
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            artifact: mcp-chinese-dict-search
-            bundle: macos-x64
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install Rust and target
-        run: |
-          rustup toolchain install 1.99.0 --profile minimal
-          rustup default 1.99.0
-          rustup target add ${{ matrix.target }}
-      - name: Install musl tools
-        if: matrix.target == 'x86_64-unknown-linux-musl'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y musl-tools
-      - name: Build
-        run: cargo build --release --target ${{ matrix.target }}
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.bundle }}
-          path: target/${{ matrix.target }}/release/${{ matrix.artifact }}
-          if-no-files-found: error
-```
+- **Linux x64** — static `x86_64-unknown-linux-musl` server and evaluator, packaged as
+  `mcp-chinese-dict-search-<version>-linux-x64.tar.gz`.
+- **macOS universal** — `aarch64-apple-darwin` and `x86_64-apple-darwin` binaries combined with
+  `lipo`, packaged as `mcp-chinese-dict-search-<version>-macos-universal.tar.gz`. This runs natively
+  on Apple Silicon (M1–M4) and Intel.
+- **Tagged releases** — the workflow attaches both archives to the GitHub release. Manual
+  `workflow_dispatch` runs upload them as workflow artifacts.
+
+The macOS job uses the available `macos-13` Intel runner and cross-compiles the arm64 slice with
+the Apple SDK. The binaries are not code-signed or notarized; see `dist/INSTALL-unix.md` for the
+Gatekeeper note.
+
+Windows remains the local `dist/` bundle and is built on Windows.
 
 ## Semantic feature (default)
 

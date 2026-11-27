@@ -21,7 +21,7 @@ chmod +x mcp-chinese-dict-search evaluate-semantic
 
 ## macOS
 
-The archive contains a universal binary for Apple Silicon and Intel:
+The archive contains a universal binary for Apple Silicon (M1–M4) and Intel:
 
 ```sh
 tar -xzf mcp-chinese-dict-search-<version>-macos-universal.tar.gz
